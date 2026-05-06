@@ -75,6 +75,7 @@
   flex: 1;
   overflow: hidden;
   position: relative;
+  isolation: isolate;
 }
 
 .vault-terminal-xterm .xterm {
@@ -83,6 +84,17 @@
 
 .vault-terminal-xterm .xterm-viewport {
   overflow-y: auto;
+}
+
+.vault-terminal-drop-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.vault-terminal-drop-overlay.active {
+  pointer-events: all;
 }
 
 .vault-terminal-dialog-row {

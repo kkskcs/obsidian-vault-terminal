@@ -1,4 +1,4 @@
-import { App, FileSystemAdapter, ItemView, WorkspaceLeaf, Scope } from 'obsidian';
+import { App, FileSystemAdapter, ItemView, Notice, WorkspaceLeaf, Scope } from 'obsidian';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
@@ -10,6 +10,17 @@ import { ActionRegistry } from '../actions/actionRegistry';
 import { registerLinkProvider } from './links';
 
 export const TERMINAL_VIEW_TYPE = 'vault-terminal';
+
+function shellEscape(p: string): string {
+  if (process.platform === 'win32') {
+    const shell = (process.env.COMSPEC ?? '').toLowerCase();
+    if (shell.includes('powershell') || shell.includes('pwsh')) {
+      return `'${p.replace(/'/g, "''")}'`;
+    }
+    return `"${p.replace(/"/g, '\\"')}"`;
+  }
+  return p.replace(/([ \\'"$`!#&*?|(){}<>[\];])/g, '\\$1');
+}
 
 export class TerminalView extends ItemView {
   private terminal: Terminal | null = null;
@@ -113,6 +124,49 @@ export class TerminalView extends ItemView {
 
     pty.onData((data) => this.terminal?.write(data));
     this.terminal.onData((data) => this.ptyManager.write(data));
+
+    const onDocDragOver = (e: DragEvent) => {
+      if (xtermEl.contains(e.target as Node)) e.preventDefault();
+    };
+    const onDocDrop = (e: DragEvent) => {
+      if (!xtermEl.contains(e.target as Node)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const dt = e.dataTransfer;
+      if (!dt) return;
+
+      // Obsidian 파일탐색기 드래그: text/uri-list (obsidian:// 스킴)
+      const uriList = dt.getData('text/uri-list');
+      if (uriList) {
+        const vaultRoot = this.configManager.getVaultRoot();
+        const paths = uriList.split(/\r?\n/)
+          .filter((u) => u.startsWith('obsidian://'))
+          .map((u) => {
+            const file = new URL(u).searchParams.get('file');
+            if (!file) return '';
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            return shellEscape([vaultRoot, decodeURIComponent(file)].join(require('path').sep).normalize('NFC'));
+          })
+          .filter(Boolean)
+          .join(' ');
+        if (paths) { this.terminal?.paste(paths); return; }
+      }
+
+      // OS 파일시스템 드래그
+      const files = Array.from(dt.files);
+      if (files.length === 0) return;
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { webUtils } = require('electron') as { webUtils: { getPathForFile(f: File): string } };
+      const paths = files.map((f) => shellEscape(webUtils.getPathForFile(f).normalize('NFC'))).join(' ');
+      if (paths) this.terminal?.paste(paths);
+      this.terminal?.focus();
+    };
+    document.addEventListener('dragover', onDocDragOver, true);
+    document.addEventListener('drop', onDocDrop, true);
+    this.register(() => {
+      document.removeEventListener('dragover', onDocDragOver, true);
+      document.removeEventListener('drop', onDocDrop, true);
+    });
 
     this.resizeObserver = new ResizeObserver(() => {
       if (this.resizeTimer) clearTimeout(this.resizeTimer);
