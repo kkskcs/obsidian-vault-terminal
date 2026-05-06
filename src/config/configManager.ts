@@ -1,4 +1,4 @@
-import { App, FileSystemAdapter, TFile } from 'obsidian';
+import { App, FileSystemAdapter, Notice, TFile } from 'obsidian';
 
 export interface ActionParam {
   name: string;
@@ -108,15 +108,20 @@ export class ConfigManager {
   constructor(private readonly app: App) {}
 
   async load(): Promise<void> {
-    try {
-      const file = this.app.vault.getAbstractFileByPath(CONFIG_PATH);
-      if (!(file instanceof TFile)) {
+    const file = this.app.vault.getAbstractFileByPath(CONFIG_PATH);
+    if (!(file instanceof TFile)) {
+      try {
         await this.createDefault();
-        return;
+      } catch {
+        // 이미 존재하는 경우 무시
       }
+      return;
+    }
+    try {
       const raw = await this.app.vault.read(file);
       this.config = { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
     } catch {
+      new Notice('vault-terminal: Failed to parse config.json, using defaults.');
       this.config = { ...DEFAULT_CONFIG };
     }
   }

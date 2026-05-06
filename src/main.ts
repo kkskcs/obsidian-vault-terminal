@@ -1,12 +1,21 @@
 import { FileSystemAdapter, Plugin } from 'obsidian';
 import * as path from 'path';
 import { TERMINAL_VIEW_TYPE, TerminalView } from './terminal/terminal';
+import { ConfigManager } from './config/configManager';
+import { ActionRegistry } from './actions/actionRegistry';
 
 export default class VaultTerminalPlugin extends Plugin {
+  private configManager!: ConfigManager;
+  private actionRegistry!: ActionRegistry;
+
   async onload(): Promise<void> {
+    this.configManager = new ConfigManager(this.app);
+    await this.configManager.load();
+    this.actionRegistry = new ActionRegistry(this.app, this.configManager);
+
     this.registerView(
       TERMINAL_VIEW_TYPE,
-      (leaf) => new TerminalView(leaf, this.getPluginDir()),
+      (leaf) => new TerminalView(leaf, this.getPluginDir(), this.configManager, this.actionRegistry),
     );
 
     this.addRibbonIcon('terminal', 'Vault Terminal', () => this.activateView());
@@ -16,10 +25,21 @@ export default class VaultTerminalPlugin extends Plugin {
       name: 'Open Vault Terminal',
       callback: () => this.activateView(),
     });
+
+    this.actionRegistry.registerCommands(
+      (id, name, callback) => this.addCommand({ id, name, callback }),
+      (text) => this.getActiveView()?.sendToTerminal(text),
+      (action) => this.getActiveView()?.handlePassthrough(action),
+    );
   }
 
   onunload(): void {
     this.app.workspace.detachLeavesOfType(TERMINAL_VIEW_TYPE);
+  }
+
+  private getActiveView(): TerminalView | null {
+    const leaves = this.app.workspace.getLeavesOfType(TERMINAL_VIEW_TYPE);
+    return leaves.length > 0 ? (leaves[0].view as TerminalView) : null;
   }
 
   private async activateView(): Promise<void> {

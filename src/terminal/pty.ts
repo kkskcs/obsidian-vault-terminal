@@ -25,12 +25,16 @@ export class PtyManager {
       rows,
       cwd: vaultRoot,
       env: {
-        ...(process.env as Record<string, string>),
+        ...Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined)),
         VAULT_ROOT: vaultRoot,
         LANG: 'en_US.UTF-8',
         LC_ALL: 'en_US.UTF-8',
         ...env,
       },
+    });
+
+    this.pty.onExit(() => {
+      this.pty = null;
     });
 
     return this.pty;

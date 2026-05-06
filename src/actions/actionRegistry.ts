@@ -1,3 +1,4 @@
+import * as path from 'path';
 import { App } from 'obsidian';
 import { ActionDef, ActionParam, ConfigManager } from '../config/configManager';
 import { TemplateEngine } from './templateEngine';
@@ -68,7 +69,12 @@ export class ActionRegistry {
         if (!action.script) break;
         const vaultRoot = this.config.getVaultRoot();
         const scriptFolder = this.config.getScriptFolder();
-        const scriptPath = `${vaultRoot}/${scriptFolder}/${action.script}`;
+        const scriptPath = path.join(vaultRoot, scriptFolder, action.script);
+        const allowedBase = path.resolve(path.join(vaultRoot, scriptFolder));
+        if (!path.resolve(scriptPath).startsWith(allowedBase + path.sep)) {
+          send(`\r\nScript error: path not allowed.\r\n`);
+          break;
+        }
         const args = (action.params ?? []).map((p) => params[p.name] ?? '');
         this.scriptRunner
           .run(scriptPath, args, vaultRoot)

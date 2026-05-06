@@ -23,9 +23,19 @@ export class ParamDialog extends Modal {
     contentEl.empty();
 
     for (const param of this.params) {
-      if (this.result[param.name] !== undefined) continue;
-
       const row = contentEl.createDiv({ cls: 'vault-terminal-dialog-row' });
+
+      if (this.result[param.name] !== undefined) {
+        row.createEl('label', { text: param.name, cls: 'vault-terminal-dialog-label' });
+        const input = row.createEl('input', {
+          type: 'text',
+          cls: 'vault-terminal-dialog-input',
+        });
+        input.value = this.result[param.name];
+        input.disabled = true;
+        continue;
+      }
+
       row.createEl('label', { text: param.name, cls: 'vault-terminal-dialog-label' });
 
       if (param.type === 'choice' && param.choices?.length) {

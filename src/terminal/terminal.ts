@@ -18,18 +18,21 @@ export class TerminalView extends ItemView {
   private toolbar: Toolbar | null = null;
   private terminalScope: Scope;
   private resizeObserver: ResizeObserver | null = null;
+  private resizeTimer: ReturnType<typeof setTimeout> | null = null;
   private configManager: ConfigManager;
   private actionRegistry: ActionRegistry;
 
   constructor(
     leaf: WorkspaceLeaf,
     private readonly pluginDir: string,
+    configManager: ConfigManager,
+    actionRegistry: ActionRegistry,
   ) {
     super(leaf);
     this.ptyManager = new PtyManager();
     this.terminalScope = new Scope();
-    this.configManager = new ConfigManager(this.app);
-    this.actionRegistry = new ActionRegistry(this.app, this.configManager);
+    this.configManager = configManager;
+    this.actionRegistry = actionRegistry;
   }
 
   getViewType(): string {
@@ -47,7 +50,7 @@ export class TerminalView extends ItemView {
   async onOpen(): Promise<void> {
     await this.configManager.load();
 
-    const container = this.containerEl.children[1] as HTMLElement;
+    const container = this.contentEl;
     container.empty();
     container.addClass('vault-terminal-container');
 
@@ -79,7 +82,8 @@ export class TerminalView extends ItemView {
     this.terminal.loadAddon(this.fitAddon);
     this.terminal.loadAddon(unicode11);
     this.terminal.loadAddon(new WebLinksAddon((_e, uri) => {
-      const webviewer = (this.app as any).internalPlugins?.getEnabledPluginById('webviewer');
+      const internalPlugins = (this.app as unknown as { internalPlugins?: { getEnabledPluginById(id: string): unknown } }).internalPlugins;
+      const webviewer = internalPlugins?.getEnabledPluginById('webviewer');
       if (webviewer) {
         this.app.workspace.getLeaf('tab').setViewState({ type: 'webviewer', active: true, state: { url: uri, navigate: true } });
       } else {
@@ -93,8 +97,10 @@ export class TerminalView extends ItemView {
 
     registerLinkProvider(this.terminal, this.app);
 
-    this.terminal.textarea?.addEventListener('focus', () => this.app.keymap.pushScope(this.terminalScope));
-    this.terminal.textarea?.addEventListener('blur', () => this.app.keymap.popScope(this.terminalScope));
+    if (this.terminal.textarea) {
+      this.terminal.textarea.addEventListener('focus', () => this.app.keymap.pushScope(this.terminalScope));
+      this.terminal.textarea.addEventListener('blur', () => this.app.keymap.popScope(this.terminalScope));
+    }
 
     const vaultRoot = this.configManager.getVaultRoot();
     const pty = this.ptyManager.spawn({
@@ -109,20 +115,28 @@ export class TerminalView extends ItemView {
     this.terminal.onData((data) => this.ptyManager.write(data));
 
     this.resizeObserver = new ResizeObserver(() => {
-      this.fitAddon?.fit();
-      this.ptyManager.resize(this.terminal?.cols ?? 80, this.terminal?.rows ?? 24);
+      if (this.resizeTimer) clearTimeout(this.resizeTimer);
+      this.resizeTimer = setTimeout(() => {
+        this.fitAddon?.fit();
+        this.ptyManager.resize(this.terminal?.cols ?? 80, this.terminal?.rows ?? 24);
+      }, 50);
     });
     this.resizeObserver.observe(xtermEl);
   }
 
   async onClose(): Promise<void> {
     this.app.keymap.popScope(this.terminalScope);
+    if (this.resizeTimer) clearTimeout(this.resizeTimer);
     this.resizeObserver?.disconnect();
     this.ptyManager.kill();
     this.terminal?.dispose();
   }
 
-  private handlePassthrough(action: string): void {
+  sendToTerminal(text: string): void {
+    this.ptyManager.write(text);
+  }
+
+  handlePassthrough(action: string): void {
     if (action === 'addTerminalOutputToNote') this.addTerminalOutputToNote();
     else if (action === 'sendSelectedTextToTerminal') this.sendNoteToTerminal();
   }
