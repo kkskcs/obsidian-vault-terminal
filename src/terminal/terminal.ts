@@ -2,10 +2,12 @@ import { App, FileSystemAdapter, ItemView, WorkspaceLeaf, Scope } from 'obsidian
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
+import { WebLinksAddon } from '@xterm/addon-web-links';
 import { PtyManager } from './pty';
 import { Toolbar, ActionButton, SystemButtonCallbacks } from '../ui/toolbar';
 import { ConfigManager } from '../config/configManager';
 import { ActionRegistry } from '../actions/actionRegistry';
+import { registerLinkProvider } from './links';
 
 export const TERMINAL_VIEW_TYPE = 'vault-terminal';
 
@@ -76,9 +78,20 @@ export class TerminalView extends ItemView {
     this.terminal = new Terminal({ allowProposedApi: true });
     this.terminal.loadAddon(this.fitAddon);
     this.terminal.loadAddon(unicode11);
+    this.terminal.loadAddon(new WebLinksAddon((_e, uri) => {
+      const webviewer = (this.app as any).internalPlugins?.getEnabledPluginById('webviewer');
+      if (webviewer) {
+        this.app.workspace.getLeaf('tab').setViewState({ type: 'webviewer', active: true, state: { url: uri, navigate: true } });
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        require('electron').shell.openExternal(uri);
+      }
+    }));
     this.terminal.unicode.activeVersion = '11';
     this.terminal.open(xtermEl);
     this.fitAddon.fit();
+
+    registerLinkProvider(this.terminal, this.app);
 
     this.terminal.textarea?.addEventListener('focus', () => this.app.keymap.pushScope(this.terminalScope));
     this.terminal.textarea?.addEventListener('blur', () => this.app.keymap.popScope(this.terminalScope));
