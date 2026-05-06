@@ -1,9 +1,11 @@
-import { FileSystemAdapter, ItemView, WorkspaceLeaf, Scope } from 'obsidian';
+import { App, FileSystemAdapter, ItemView, WorkspaceLeaf, Scope } from 'obsidian';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { PtyManager } from './pty';
-import { Toolbar, SystemButtonCallbacks } from '../ui/toolbar';
+import { Toolbar, ActionButton, SystemButtonCallbacks } from '../ui/toolbar';
+import { ConfigManager } from '../config/configManager';
+import { ActionRegistry } from '../actions/actionRegistry';
 
 export const TERMINAL_VIEW_TYPE = 'vault-terminal';
 
@@ -14,11 +16,18 @@ export class TerminalView extends ItemView {
   private toolbar: Toolbar | null = null;
   private terminalScope: Scope;
   private resizeObserver: ResizeObserver | null = null;
+  private configManager: ConfigManager;
+  private actionRegistry: ActionRegistry;
 
-  constructor(leaf: WorkspaceLeaf, private readonly pluginDir: string) {
+  constructor(
+    leaf: WorkspaceLeaf,
+    private readonly pluginDir: string,
+  ) {
     super(leaf);
     this.ptyManager = new PtyManager();
     this.terminalScope = new Scope();
+    this.configManager = new ConfigManager(this.app);
+    this.actionRegistry = new ActionRegistry(this.app, this.configManager);
   }
 
   getViewType(): string {
@@ -34,6 +43,8 @@ export class TerminalView extends ItemView {
   }
 
   async onOpen(): Promise<void> {
+    await this.configManager.load();
+
     const container = this.containerEl.children[1] as HTMLElement;
     container.empty();
     container.addClass('vault-terminal-container');
@@ -49,7 +60,14 @@ export class TerminalView extends ItemView {
       onTerminalToNote: () => this.addTerminalOutputToNote(),
     };
     this.toolbar = new Toolbar(toolbarEl, this.app, callbacks);
-    this.toolbar.render();
+
+    const actionButtons: ActionButton[] = this.configManager.getToolbarActions().map((action) => ({
+      id: action.id,
+      label: action.label,
+      icon: action.icon ?? 'terminal',
+      onClick: () => this.actionRegistry.execute(action, (text) => this.ptyManager.write(text), (a) => this.handlePassthrough(a)),
+    }));
+    this.toolbar.setActionButtons(actionButtons);
 
     const xtermEl = container.createDiv({ cls: 'vault-terminal-xterm' });
 
@@ -65,10 +83,11 @@ export class TerminalView extends ItemView {
     this.terminal.textarea?.addEventListener('focus', () => this.app.keymap.pushScope(this.terminalScope));
     this.terminal.textarea?.addEventListener('blur', () => this.app.keymap.popScope(this.terminalScope));
 
-    const vaultRoot = this.getVaultRoot();
+    const vaultRoot = this.configManager.getVaultRoot();
     const pty = this.ptyManager.spawn({
       vaultRoot,
       pluginDir: this.pluginDir,
+      env: this.configManager.get().env ?? {},
       cols: this.terminal.cols,
       rows: this.terminal.rows,
     });
@@ -90,12 +109,9 @@ export class TerminalView extends ItemView {
     this.terminal?.dispose();
   }
 
-  private getVaultRoot(): string {
-    const { adapter } = this.app.vault;
-    if (adapter instanceof FileSystemAdapter) {
-      return adapter.getBasePath();
-    }
-    return process.cwd();
+  private handlePassthrough(action: string): void {
+    if (action === 'addTerminalOutputToNote') this.addTerminalOutputToNote();
+    else if (action === 'sendSelectedTextToTerminal') this.sendNoteToTerminal();
   }
 
   private showEnvPopup(): void {}

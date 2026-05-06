@@ -84,3 +84,26 @@
 .vault-terminal-xterm .xterm-viewport {
   overflow-y: auto;
 }
+
+.vault-terminal-dialog-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.vault-terminal-dialog-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.vault-terminal-dialog-input {
+  width: 100%;
+}
+
+.vault-terminal-dialog-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
