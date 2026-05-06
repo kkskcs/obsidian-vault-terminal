@@ -1,0 +1,10 @@
+# Build output
+main.js
+main.js.map
+
+# Dependencies
+node_modules/
+package-lock.json
+
+# IDE
+.idea/
