@@ -1,0 +1,11 @@
+{
+  "id": "obsidian-vault-terminal",
+  "name": "Vault Terminal",
+  "version": "1.0.0",
+  "minAppVersion": "0.15.0",
+  "description": "Embedded terminal with action buttons and path-to-link conversion for your Vault.",
+  "author": "",
+  "authorUrl": "",
+  "fundingUrl": "",
+  "isDesktopOnly": true
+}

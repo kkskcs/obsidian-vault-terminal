@@ -1,0 +1,44 @@
+.vault-terminal-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+.vault-terminal-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  background-color: var(--background-secondary);
+  flex-shrink: 0;
+}
+
+.vault-terminal-action-btn {
+  padding: 2px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 3px;
+  border: 1px solid var(--background-modifier-border);
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+}
+
+.vault-terminal-action-btn:hover {
+  background-color: var(--background-modifier-hover);
+}
+
+.vault-terminal-xterm {
+  flex: 1;
+  overflow: hidden;
+}
+
+.vault-terminal-xterm .xterm {
+  height: 100%;
+}
+
+.vault-terminal-xterm .xterm-viewport {
+  overflow-y: auto;
+}
