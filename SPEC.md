@@ -182,64 +182,48 @@
 
 ---
 
-### 2.4 파일 경로 → 링크 변환 시스템
+### 2.4 Wikilink 감지 및 렌더링
 
-#### 2.4.1 Vault 루트 설정
-- **설정**: `vaultRoot: true`
-- **의미**: Vault 디렉토리를 모든 경로의 루트로 설정
-- **예**: `/Users/t1100088/Documents/obsidian` = Vault root
-
-#### 2.4.2 경로 정규화 프로세스
+#### 2.4.1 지원 포맷
+Obsidian 표준 wikilink 포맷만 지원:
 ```
-입력 터미널 출력:
-  - "./Inbox/note.md"
-  - "../Inbox/note.md"
-  - "/Users/t1100088/Documents/obsidian/Inbox/note.md"
-  - "~/obsidian/Inbox/note.md"
-↓ (정규화)
-
-정규화된 경로:
-  - "Inbox/note.md"
-↓ (링크 변환)
-
-클릭 가능한 링크:
-  - [[Inbox/note.md]]
+[[linkpath]]
+[[linkpath#heading]]
+[[linkpath|alias]]
+[[linkpath#heading|alias]]
 ```
 
-#### 2.4.3 경로 감지 (정규식)
+- `linkpath`: Vault 내 파일 경로 또는 파일명
+- `#heading`: 섹션 앵커 (선택)
+- `alias`: 표시용 이름 (선택)
+- 터미널 출력에서 감지 → 클릭 가능한 링크로 렌더링
+
+#### 2.4.2 링크 해석 (Obsidian 위임)
+플러그인이 직접 경로를 해석하지 않고 Obsidian API에 완전히 위임:
+```typescript
+app.workspace.openLinkText(linktext, '', false)
 ```
-패턴 1: 상대경로
-/\.\/[\w\-. \/]+/g  매칭: "./Inbox/note.md"
+- `[[파일명]]` → Obsidian 설정의 "New link format"에 따라 파일 resolve
+- 동일 파일명이 여러 폴더에 있을 경우 Obsidian 설정(shortest/relative/absolute) 기준으로 처리
+- `#heading`/`|alias` 포함 모든 wikilink 형식 그대로 전달
 
-패턴 2: 절대경로 (Vault 범위 내)
-/\/Users\/t1100088\/Documents\/obsidian\/([\w\-. \/]+)/g
+#### 2.4.3 렌더링
+- **엔진**: xterm.js `registerLinkProvider` API
+- **좌표 보정**: `getCell().getWidth()`로 double-width 문자(한글, CJK, 이모지 등) 컬럼 보정
+- **스타일**: 텍스트 전경색을 그대로 사용한 밑줄, 호버 시 포인터 커서
+- **URL 클릭**: webviewer 내장 플러그인 활성화 시 Obsidian 탭으로 열기, 비활성화 시 외부 브라우저
 
-패턴 3: 파일 확장자 명시
-/([\w\-. \/]+\.(md|txt|yaml|json))/g
+#### 2.4.4 AI 출력 연동 가이드 (템플릿)
+AI 도구(Claude Code, Aider 등)에 wikilink 포맷 출력을 지시하는 템플릿을 설정 UI에서 생성 가능:
+- `app.vault.config.newLinkFormat` 값(shortest/relative/absolute) 자동 읽기
+- 설정값에 맞는 wikilink 포맷 지시문 자동 생성
+- 생성된 지시문은 복사하거나 system prompt / rules 파일에 추가 가능
 
-패턴 4: wiki-link 형식
-/\[\[([^\]]+)\]\]/g  매칭: "[[Inbox/note.md]]", "[[노트명]]"
+예시 (shortest format):
 ```
-
-**wiki-link 처리:**
-- 터미널 출력에서 `[[노트명]]` 형식 감지
-- 그대로 클릭 가능 링크로 렌더링 (이미 Vault 내 링크 형식)
-- `app.workspace.openLinkText(noteName, '')` 로 열기
-- CLI AI 툴이 노트명을 wiki-link 형식으로 출력할 경우 바로 열 수 있음
-
-#### 2.4.4 링크 렌더링
-- **xterm.js 커스터마이징**: registerLinkProvider API
-- **표시 형식**: `[[경로/파일명]]` (옵시디언 기본 링크 형식)
-- **스타일**: 밑줄, 다른 색상으로 표시 (마우스 호버 시 손가락 커서)
-- **클릭 이벤트**:
-  ```javascript
-  activate: () => app.workspace.openLinkText(filepath, '');
-  ```
-
-#### 2.4.5 Vault 외부 경로 처리
-- **정책**: Vault 범위 밖 파일은 링크 변환 X
-- **이유**: 옵시디언 링크는 Vault 내 파일만 지원
-- **대안**: 사용자가 직접 파일 매니저에서 열어야 함 (또는 obsidian:// URI 활용)
+파일 참조 시 [[파일명]] 형식의 Obsidian wikilink로 출력해 주세요.
+섹션 링크는 [[파일명#섹션]], 별칭은 [[파일명|표시이름]] 형식을 사용하세요.
+```
 
 ---
 
@@ -614,13 +598,6 @@ Obsidian 설정 탭에서 플러그인 전체 설정을 GUI로 관리. `config.j
   "ruleSets": [
     { "id": "claude-setup", "label": "Claude Workflow", "actions": ["current-context", "search-grep", "add-to-note"] }
   ],
-  "pathPatterns": {
-    "enabled": true,
-    "patterns": [
-      { "name": "relative", "regex": "\\.\\/.+(\\.\\w+)?" },
-      { "name": "filename", "regex": "[\\w\\-. ]+\\.(md|txt|yaml|json|sh)" }
-    ]
-  }
 }
 ```
 
@@ -639,7 +616,6 @@ Obsidian 설정 탭에서 플러그인 전체 설정을 GUI로 관리. `config.j
 | `actions` | array | [...] | 액션 정의 배열 |
 | `toolbar` | array | [...] | 표시할 버튼 목록 (ID) |
 | `ruleSets` | array | [...] | 액션 조합 정의 |
-| `pathPatterns` | object | {...} | 경로 감지 정규식 |
 
 ---
 
@@ -751,63 +727,52 @@ echo "Backup created: $backup_dir"
 
 ## 6. 링크 변환 상세 로직
 
-### 6.1 경로 감지 및 정규화
+### 6.1 Wikilink 감지
 
-**입력 예시:**
-```
-$ find . -name "*.md"
-./Inbox/claude code 세팅.md
-./Inbox/project-candidates-review.md
-/Users/t1100088/Documents/obsidian/Inbox/무제.md
-../backup/old-note.md
-```
-
-**정규화 프로세스:**
-
-| 입력 경로 | 정규화 | 링크 변환 | 결과 |
-|----------|--------|---------|------|
-| `./Inbox/claude code 세팅.md` | `Inbox/claude code 세팅.md` | ✓ | `[[Inbox/claude code 세팅.md]]` |
-| `/Users/t1100088/Documents/obsidian/Inbox/무제.md` | `Inbox/무제.md` | ✓ | `[[Inbox/무제.md]]` |
-| `../backup/old-note.md` | (Vault 범위 밖) | ✗ | 링크 변환 안 함 |
-
-### 6.2 xterm.js 링크 렌더링
+터미널 출력 버퍼에서 `[[...]]` 패턴을 정규식으로 탐지:
 
 ```typescript
-term.registerLinkProvider({
-  provideLinks: (bufferLineIndex, callback) => {
-    const line = term.buffer.active.getLine(bufferLineIndex);
-    const text = line?.translateToString() ?? '';
-    const regex = /\.\/[\w\-. \/]+\.(\w+)|[\w\-. ]+\.md/g;
-    const links: ILink[] = [];
-    let match;
-    while ((match = regex.exec(text)) !== null) {
-      const normalizedPath = normalizePath(match[0]);
-      if (isWithinVault(normalizedPath)) {
-        links.push({
-          range: { start: { x: match.index + 1, y: bufferLineIndex + 1 }, end: { x: match.index + match[0].length, y: bufferLineIndex + 1 } },
-          text: `[[${normalizedPath}]]`,
-          activate: () => openFileInObsidian(normalizedPath),
-          decorations: { underline: true }
-        });
-      }
-    }
-    callback(links);
-  }
-});
+const WIKILINK_RE = /\[\[[^\]]+\]\]/g;
 ```
 
-### 6.3 파일 열기 (Obsidian API)
+- `[[linkpath]]`, `[[linkpath#heading]]`, `[[linkpath|alias]]`, `[[linkpath#heading|alias]]` 모두 매칭
+- 파일 확장자 기반 경로 패턴은 지원하지 않음
+
+### 6.2 컬럼 좌표 보정
+
+xterm.js `IBufferLine`의 각 셀은 문자 단위가 아닌 컬럼 단위. CJK/이모지 등 double-width 문자는 2컬럼을 차지하므로, 문자 인덱스 → 컬럼 인덱스 변환이 필요:
 
 ```typescript
-function openFileInObsidian(filepath: string) {
-  const file = app.vault.getAbstractFileByPath(filepath);
-  if (file instanceof TFile) {
-    app.workspace.openLinkText(filepath, '', false);
-  } else {
-    new Notice(`File not found: ${filepath}`);
+function buildCharToCol(line: IBufferLine): number[] {
+  const charToCol: number[] = [];
+  let col = 0;
+  const cell = line.getCell(0);
+  while (col < line.length) {
+    const c = line.getCell(col, cell);
+    if (!c) break;
+    const width = c.getWidth();
+    if (width === 0) { col++; continue; }
+    charToCol.push(col);
+    col += width;
   }
+  return charToCol;
 }
 ```
+
+- `Unicode11Addon` 로드 시 Unicode 11 기준 width 정확도 보장
+- `charToCol[i]` → i번째 문자의 xterm 컬럼 위치
+
+### 6.3 링크 열기 (Obsidian 위임)
+
+경로 해석을 플러그인이 직접 하지 않고 Obsidian API에 완전히 위임:
+
+```typescript
+app.workspace.openLinkText(linktext, '', false)
+```
+
+- `linktext`: `[[...]]` 내부 문자열 그대로 (예: `파일명`, `파일명#섹션`, `파일명|별칭`)
+- Obsidian 설정(shortest/relative/absolute)에 따라 파일 resolve
+- 동일 파일명 충돌 처리도 Obsidian 로직에 위임
 
 ---
 
