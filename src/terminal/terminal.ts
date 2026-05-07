@@ -140,7 +140,7 @@ export class TerminalView extends ItemView {
     this.terminal.loadAddon(this.webglAddon);
     this.fitAddon.fit();
 
-    registerLinkProvider(this.terminal, this.app);
+    registerLinkProvider(this.terminal, this.app, this.configManager);
 
     const unsubscribe = this.configManager.onChanged(() => {
       if (!this.terminal) return;
