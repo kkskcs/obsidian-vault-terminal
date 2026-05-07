@@ -47,12 +47,6 @@ export default class VaultTerminalPlugin extends Plugin {
   }
 
   private async activateView(): Promise<void> {
-    const existing = this.app.workspace.getLeavesOfType(TERMINAL_VIEW_TYPE);
-    if (existing.length > 0) {
-      this.app.workspace.revealLeaf(existing[0]);
-      return;
-    }
-
     const leaf = this.app.workspace.getLeaf('tab');
     await leaf.setViewState({ type: TERMINAL_VIEW_TYPE, active: true });
     this.app.workspace.revealLeaf(leaf);

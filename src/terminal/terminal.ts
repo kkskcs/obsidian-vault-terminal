@@ -185,6 +185,7 @@ export class TerminalView extends ItemView {
     });
 
     pty.onData((data) => this.terminal?.write(data));
+    pty.onExit(() => this.leaf.detach());
     this.terminal.onData((data) => this.ptyManager.write(data));
 
     const onDocDragOver = (e: DragEvent) => {
