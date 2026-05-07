@@ -221,7 +221,10 @@ export interface VaultTerminalConfig {
   pathPatterns?: { enabled: boolean; patterns: Array<{ name: string; regex: string }> };
 }
 
-const CONFIG_PATH = '.vault-terminal/config.json';
+interface ConfigDataStore {
+  loadData(): Promise<unknown>;
+  saveData(data: unknown): Promise<void>;
+}
 
 export const PREDEFINED_PROFILES: Record<string, Profile> = {
   basic: {
@@ -597,7 +600,10 @@ export class ConfigManager {
   private config: VaultTerminalConfig = { ...DEFAULT_CONFIG };
   private listeners: Array<() => void> = [];
 
-  constructor(private readonly app: App) {}
+  constructor(
+    private readonly app: App,
+    private readonly dataStore: ConfigDataStore,
+  ) {}
 
   onChanged(cb: () => void): () => void {
     this.listeners.push(cb);
@@ -605,17 +611,17 @@ export class ConfigManager {
   }
 
   async load(): Promise<void> {
-    const adapter = this.app.vault.adapter;
-    const exists = await adapter.exists(CONFIG_PATH);
-    if (!exists) {
-      await this.createDefault();
-      return;
-    }
     try {
-      const raw = await adapter.read(CONFIG_PATH);
-      this.config = { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
+      const stored = await this.dataStore.loadData();
+      if (stored && typeof stored === 'object') {
+        this.config = { ...DEFAULT_CONFIG, ...(stored as VaultTerminalConfig) };
+        return;
+      }
+
+      this.config = { ...DEFAULT_CONFIG };
+      await this.save();
     } catch {
-      new Notice('vault-terminal: Failed to parse config.json, using defaults.');
+      new Notice('vault-terminal: Failed to load settings, using defaults.');
       this.config = { ...DEFAULT_CONFIG };
     }
   }
@@ -629,13 +635,7 @@ export class ConfigManager {
   }
 
   async save(): Promise<void> {
-    const content = JSON.stringify(this.config, null, 2);
-    const adapter = this.app.vault.adapter;
-    const dir = CONFIG_PATH.split('/')[0];
-    if (!(await adapter.exists(dir))) {
-      await adapter.mkdir(dir);
-    }
-    await adapter.write(CONFIG_PATH, content);
+    await this.dataStore.saveData(this.config);
     for (const cb of this.listeners) cb();
   }
 
@@ -664,13 +664,5 @@ export class ConfigManager {
 
   getScriptFolder(): string {
     return this.config.scriptFolder ?? '.vault-terminal/scripts';
-  }
-
-  private async createDefault(): Promise<void> {
-    const dir = '.vault-terminal';
-    if (!this.app.vault.getAbstractFileByPath(dir)) {
-      await this.app.vault.createFolder(dir);
-    }
-    await this.app.vault.create(CONFIG_PATH, JSON.stringify(DEFAULT_CONFIG, null, 2));
   }
 }

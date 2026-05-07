@@ -26,7 +26,7 @@ Open the terminal via the ribbon icon or command palette (`Open Vault Terminal`)
 
 ### Action Buttons
 
-Define custom toolbar buttons in `.vault-terminal/config.json`:
+Configure custom toolbar buttons in the plugin settings. The underlying shape is:
 
 ```json
 {

@@ -31,7 +31,7 @@ export default class VaultTerminalPlugin extends Plugin {
     const pluginDir = this.getPluginDir();
     registerCustomIcons();
 
-    this.configManager = new ConfigManager(this.app);
+    this.configManager = new ConfigManager(this.app, this);
     await this.configManager.load();
     this.actionRegistry = new ActionRegistry(this.app, this.configManager);
 

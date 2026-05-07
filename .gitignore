@@ -2,6 +2,7 @@
 main.js
 main.js.map
 styles.css
+data.json
 
 # Dependencies
 node_modules/

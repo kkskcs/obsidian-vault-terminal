@@ -77,7 +77,7 @@
 | 📤 | Terminal → Note | 최근 터미널 출력을 현재 노트에 추가 |
 
 **사용자 정의 버튼 (오른쪽, 가로 스크롤)**
-- config.json `toolbar` 배열 순서대로 렌더링
+- 설정 데이터의 `toolbar` 배열 순서대로 렌더링
 - 버튼 수가 많을 경우 가로 스크롤
 - 모든 버튼 아이콘 기반, 라벨은 hover 툴팁으로 표시
 - 아이콘: Obsidian 내장 lucide 아이콘 사용 (`setIcon()` API)
@@ -297,7 +297,7 @@ AI 도구(Claude Code, Aider 등)에 wikilink 포맷 출력을 지시하는 템�
 4. 현재 노트 맨 아래 추가
 
 **캡처 줄 수 설정:**
-- config.json `addToNote.lines` 기본값: `200`
+- 설정 데이터의 `addToNote.lines` 기본값: `200`
 - 버튼 클릭 시 다이얼로그에서 줄 수 직접 입력 가능 (빈 값이면 기본값 사용)
 
 **출력 포맷:**
@@ -350,7 +350,7 @@ app.commands.addCommand({
 터미널 탭 열 때 1회 주입.
 
 #### 2.8.3 사용자 정의 환경변수
-config.json에 추가 환경변수 정의 가능:
+설정 데이터에 추가 환경변수 정의 가능:
 ```json
 {
   "env": {
@@ -471,7 +471,7 @@ grep -r "keyword" .
 
 ### 2.11 설정 UI (PluginSettingTab)
 
-Obsidian 설정 탭에서 플러그인 전체 설정을 GUI로 관리. `config.json` 직접 편집 불필요.
+Obsidian 설정 탭에서 플러그인 전체 설정을 GUI로 관리. `data.json`에 저장되며 직접 편집은 필수가 아님.
 
 #### Terminal 탭
 - **터미널 옵션**: 폰트 크기, 줄 높이, 커서 스타일, 스크롤백 줄 수
@@ -498,9 +498,9 @@ Obsidian 설정 탭에서 플러그인 전체 설정을 GUI로 관리. `config.j
 ## 3. 설정 구조
 
 ### 3.1 설정 파일 위치
-- **위치**: Vault root 내 `.vault-terminal/config.json`
-- **생성**: 플러그인 첫 설치 시 자동 생성
-- **편집**: 사용자가 직접 JSON 수정
+- **위치**: Obsidian plugin data store (`data.json`)
+- **생성**: 플러그인 첫 저장 시 자동 생성
+- **편집**: 일반적으로 설정 UI를 통해 관리
 
 ### 3.2 전체 설정 예시
 
@@ -682,7 +682,6 @@ Obsidian 설정 탭에서 플러그인 전체 설정을 GUI로 관리. `config.j
 ```
 Vault/
 ├─ .vault-terminal/
-│  ├─ config.json
 │  └─ scripts/
 │     ├─ search.sh
 │     ├─ backup.sh
