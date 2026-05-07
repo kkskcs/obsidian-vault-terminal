@@ -16,7 +16,7 @@ export class PtyManager {
   private pty: nodePty.IPty | null = null;
 
   spawn(options: PtyOptions): nodePty.IPty {
-    const shell = this.detectShell();
+    const { shell, args } = this.detectShell();
     const { vaultRoot, pluginDir, env = {}, locale = 'system', appLocale = 'en', cols = 80, rows = 24 } = options;
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -27,7 +27,7 @@ export class PtyManager {
       ? { LANG: resolvedLocale, LC_ALL: resolvedLocale }
       : { LC_CTYPE: 'UTF-8' };
 
-    this.pty = nodePtyModule.spawn(shell, [], {
+    this.pty = nodePtyModule.spawn(shell, args, {
       name: 'xterm-256color',
       cols,
       rows,
@@ -63,10 +63,21 @@ export class PtyManager {
     this.pty = null;
   }
 
-  private detectShell(): string {
+  private detectShell(): { shell: string; args: string[] } {
     if (process.platform === 'win32') {
-      return process.env.COMSPEC ?? 'cmd.exe';
+      return { shell: process.env.COMSPEC ?? 'cmd.exe', args: [] };
     }
-    return process.env.SHELL ?? '/bin/bash';
+    const shell = process.env.SHELL ?? '/bin/bash';
+    const shellName = path.basename(shell).toLowerCase();
+
+    if (shellName === 'zsh' || shellName === 'bash') {
+      return { shell, args: ['-il'] };
+    }
+
+    if (shellName === 'fish') {
+      return { shell, args: ['--login'] };
+    }
+
+    return { shell, args: [] };
   }
 }
