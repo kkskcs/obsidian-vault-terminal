@@ -1,13 +1,13 @@
-import { App, FileSystemAdapter, ItemView, Notice, WorkspaceLeaf, Scope } from 'obsidian';
-import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { WebLinksAddon } from '@xterm/addon-web-links';
-import { PtyManager } from './pty';
-import { Toolbar, ActionButton, SystemButtonCallbacks } from '../ui/toolbar';
-import { ConfigManager } from '../config/configManager';
+import { Terminal } from '@xterm/xterm';
+import { ItemView, Scope, WorkspaceLeaf } from 'obsidian';
 import { ActionRegistry } from '../actions/actionRegistry';
+import { ConfigManager } from '../config/configManager';
+import { ActionButton, SystemButtonCallbacks, Toolbar } from '../ui/toolbar';
 import { registerLinkProvider } from './links';
+import { PtyManager } from './pty';
 
 export const TERMINAL_VIEW_TYPE = 'vault-terminal';
 
@@ -81,7 +81,12 @@ export class TerminalView extends ItemView {
       id: action.id,
       label: action.label,
       icon: action.icon ?? 'terminal',
-      onClick: () => this.actionRegistry.execute(action, (text) => this.ptyManager.write(text), (a) => this.handlePassthrough(a)),
+      onClick: () =>
+        this.actionRegistry.execute(
+          action,
+          (text) => this.ptyManager.write(text),
+          (a) => this.handlePassthrough(a),
+        ),
     }));
     this.toolbar.setActionButtons(actionButtons);
 
@@ -92,16 +97,22 @@ export class TerminalView extends ItemView {
     this.terminal = new Terminal({ allowProposedApi: true });
     this.terminal.loadAddon(this.fitAddon);
     this.terminal.loadAddon(unicode11);
-    this.terminal.loadAddon(new WebLinksAddon((_e, uri) => {
-      const internalPlugins = (this.app as unknown as { internalPlugins?: { getEnabledPluginById(id: string): unknown } }).internalPlugins;
-      const webviewer = internalPlugins?.getEnabledPluginById('webviewer');
-      if (webviewer) {
-        this.app.workspace.getLeaf('tab').setViewState({ type: 'webviewer', active: true, state: { url: uri, navigate: true } });
-      } else {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        require('electron').shell.openExternal(uri);
-      }
-    }));
+    this.terminal.loadAddon(
+      new WebLinksAddon((_e, uri) => {
+        const internalPlugins = (
+          this.app as unknown as { internalPlugins?: { getEnabledPluginById(id: string): unknown } }
+        ).internalPlugins;
+        const webviewer = internalPlugins?.getEnabledPluginById('webviewer');
+        if (webviewer) {
+          this.app.workspace
+            .getLeaf('tab')
+            .setViewState({ type: 'webviewer', active: true, state: { url: uri, navigate: true } });
+        } else {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          require('electron').shell.openExternal(uri);
+        }
+      }),
+    );
     this.terminal.unicode.activeVersion = '11';
     this.terminal.open(xtermEl);
     this.fitAddon.fit();
@@ -109,8 +120,12 @@ export class TerminalView extends ItemView {
     registerLinkProvider(this.terminal, this.app);
 
     if (this.terminal.textarea) {
-      this.terminal.textarea.addEventListener('focus', () => this.app.keymap.pushScope(this.terminalScope));
-      this.terminal.textarea.addEventListener('blur', () => this.app.keymap.popScope(this.terminalScope));
+      this.terminal.textarea.addEventListener('focus', () =>
+        this.app.keymap.pushScope(this.terminalScope),
+      );
+      this.terminal.textarea.addEventListener('blur', () =>
+        this.app.keymap.popScope(this.terminalScope),
+      );
     }
 
     const vaultRoot = this.configManager.getVaultRoot();
@@ -139,17 +154,23 @@ export class TerminalView extends ItemView {
       const uriList = dt.getData('text/uri-list');
       if (uriList) {
         const vaultRoot = this.configManager.getVaultRoot();
-        const paths = uriList.split(/\r?\n/)
+        const paths = uriList
+          .split(/\r?\n/)
           .filter((u) => u.startsWith('obsidian://'))
           .map((u) => {
             const file = new URL(u).searchParams.get('file');
             if (!file) return '';
             // eslint-disable-next-line @typescript-eslint/no-var-requires
-            return shellEscape([vaultRoot, decodeURIComponent(file)].join(require('path').sep).normalize('NFC'));
+            return shellEscape(
+              [vaultRoot, decodeURIComponent(file)].join(require('path').sep).normalize('NFC'),
+            );
           })
           .filter(Boolean)
           .join(' ');
-        if (paths) { this.terminal?.paste(paths); return; }
+        if (paths) {
+          this.terminal?.paste(paths);
+          return;
+        }
       }
 
       // OS 파일시스템 드래그
@@ -157,7 +178,9 @@ export class TerminalView extends ItemView {
       if (files.length === 0) return;
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { webUtils } = require('electron') as { webUtils: { getPathForFile(f: File): string } };
-      const paths = files.map((f) => shellEscape(webUtils.getPathForFile(f).normalize('NFC'))).join(' ');
+      const paths = files
+        .map((f) => shellEscape(webUtils.getPathForFile(f).normalize('NFC')))
+        .join(' ');
       if (paths) this.terminal?.paste(paths);
       this.terminal?.focus();
     };

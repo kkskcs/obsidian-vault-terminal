@@ -1,5 +1,5 @@
+import { IBufferLine, IBufferRange, ILink, ILinkProvider, Terminal } from '@xterm/xterm';
 import { App } from 'obsidian';
-import { Terminal, ILinkProvider, ILink, IBufferLine, IBufferRange } from '@xterm/xterm';
 
 const WIKILINK_RE = /\[\[[^\]]+\]\]/g;
 
@@ -20,7 +20,10 @@ function buildCharToCol(line: IBufferLine): number[] {
     const c = line.getCell(col, cell);
     if (!c) break;
     const width = c.getWidth();
-    if (width === 0) { col++; continue; }
+    if (width === 0) {
+      col++;
+      continue;
+    }
     charToCol.push(col);
     col += width;
   }
@@ -46,7 +49,10 @@ class VaultLinkProvider implements ILinkProvider {
 
   provideLinks(bufferLineIndex: number, callback: (links: ILink[] | undefined) => void): void {
     const line = this.terminal.buffer.active.getLine(bufferLineIndex - 1);
-    if (!line) { callback(undefined); return; }
+    if (!line) {
+      callback(undefined);
+      return;
+    }
 
     const text = line.translateToString(true);
     const charToCol = buildCharToCol(line);

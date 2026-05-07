@@ -1,5 +1,5 @@
-import * as path from 'path';
 import type * as nodePty from 'node-pty';
+import * as path from 'path';
 
 interface PtyOptions {
   vaultRoot: string;
@@ -25,7 +25,9 @@ export class PtyManager {
       rows,
       cwd: vaultRoot,
       env: {
-        ...Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined)),
+        ...Object.fromEntries(
+          Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined),
+        ),
         VAULT_ROOT: vaultRoot,
         LANG: 'en_US.UTF-8',
         LC_ALL: 'en_US.UTF-8',

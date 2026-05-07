@@ -1,8 +1,8 @@
 import { FileSystemAdapter, Plugin } from 'obsidian';
 import * as path from 'path';
-import { TERMINAL_VIEW_TYPE, TerminalView } from './terminal/terminal';
-import { ConfigManager } from './config/configManager';
 import { ActionRegistry } from './actions/actionRegistry';
+import { ConfigManager } from './config/configManager';
+import { TERMINAL_VIEW_TYPE, TerminalView } from './terminal/terminal';
 
 export default class VaultTerminalPlugin extends Plugin {
   private configManager!: ConfigManager;
@@ -15,7 +15,8 @@ export default class VaultTerminalPlugin extends Plugin {
 
     this.registerView(
       TERMINAL_VIEW_TYPE,
-      (leaf) => new TerminalView(leaf, this.getPluginDir(), this.configManager, this.actionRegistry),
+      (leaf) =>
+        new TerminalView(leaf, this.getPluginDir(), this.configManager, this.actionRegistry),
     );
 
     this.addRibbonIcon('terminal', 'Vault Terminal', () => this.activateView());

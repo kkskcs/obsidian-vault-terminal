@@ -1,9 +1,9 @@
-import * as path from 'path';
 import { App } from 'obsidian';
+import * as path from 'path';
 import { ActionDef, ActionParam, ConfigManager } from '../config/configManager';
-import { TemplateEngine } from './templateEngine';
-import { ScriptRunner } from './scriptRunner';
 import { ParamDialog } from '../ui/dialog';
+import { ScriptRunner } from './scriptRunner';
+import { TemplateEngine } from './templateEngine';
 
 interface ActionContext {
   currentFile?: string;
@@ -28,10 +28,8 @@ export class ActionRegistry {
     passthrough: PassthroughFn,
   ): void {
     for (const action of this.config.getActions()) {
-      addCommand(
-        `vault-terminal:${action.id}`,
-        `Vault Terminal: ${action.label}`,
-        () => this.execute(action, send, passthrough),
+      addCommand(`vault-terminal:${action.id}`, `Vault Terminal: ${action.label}`, () =>
+        this.execute(action, send, passthrough),
       );
     }
   }
