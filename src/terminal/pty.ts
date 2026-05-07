@@ -49,10 +49,8 @@ class PythonPtyProcess implements PtyProcess {
     });
   }
 
-  private number: number;
-
   onData(callback: (data: string) => void): void {
-    this.number = this.dataCallbacks.push(callback);
+    this.dataCallbacks.push(callback);
   }
 
   onExit(callback: (event: PtyExitEvent) => void): void {

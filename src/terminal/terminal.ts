@@ -140,7 +140,7 @@ export class TerminalView extends ItemView {
       this.webglAddon?.dispose();
     });
     this.terminal.loadAddon(this.webglAddon);
-    this.fitAddon.fit();
+    this.fitAndResizePty();
 
     registerLinkProvider(this.terminal, this.app, this.configManager);
 
@@ -161,7 +161,7 @@ export class TerminalView extends ItemView {
         xtermEl.style.background = bg;
       }
       this.terminal.clearTextureAtlas?.();
-      requestAnimationFrame(() => this.fitAddon?.fit());
+      this.scheduleFitAndResizePty();
     });
     this.register(unsubscribe);
 
@@ -250,11 +250,7 @@ export class TerminalView extends ItemView {
     });
 
     this.resizeObserver = new ResizeObserver(() => {
-      if (this.resizeTimer) clearTimeout(this.resizeTimer);
-      this.resizeTimer = setTimeout(() => {
-        this.fitAddon?.fit();
-        this.ptyManager.resize(this.terminal?.cols ?? 80, this.terminal?.rows ?? 24);
-      }, 50);
+      this.scheduleFitAndResizePty();
     });
     this.resizeObserver.observe(xtermEl);
   }
@@ -278,6 +274,21 @@ export class TerminalView extends ItemView {
 
   private showRuntimeRequiredDialog(): void {
     new RuntimeRequiredDialog(this.app, this.openRuntimeSettings).open();
+  }
+
+  private scheduleFitAndResizePty(): void {
+    if (this.resizeTimer) clearTimeout(this.resizeTimer);
+    this.resizeTimer = setTimeout(() => {
+      requestAnimationFrame(() => this.fitAndResizePty());
+    }, 50);
+  }
+
+  private fitAndResizePty(): void {
+    if (!this.terminal || !this.fitAddon) return;
+
+    this.fitAddon.fit();
+    this.ptyManager.resize(this.terminal.cols, this.terminal.rows);
+    this.terminal.refresh(0, this.terminal.rows - 1);
   }
 
   private resolvedFontSize(): number {
