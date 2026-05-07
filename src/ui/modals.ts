@@ -3,18 +3,21 @@ import { App, Modal, Notice, Setting } from 'obsidian';
 export class EnvVarModal extends Modal {
   private key: string;
   private value: string;
+  private description: string;
   private submitted = false;
 
   constructor(
     app: App,
-    private readonly onSubmit: (key: string, value: string) => Promise<void>,
+    private readonly onSubmit: (key: string, value: string, description: string) => Promise<void>,
     private readonly afterClose?: () => void,
     initialKey = '',
     initialValue = '',
+    initialDescription = '',
   ) {
     super(app);
     this.key = initialKey;
     this.value = initialValue;
+    this.description = initialDescription;
   }
 
   onOpen(): void {
@@ -38,12 +41,21 @@ export class EnvVarModal extends Modal {
       );
 
     new Setting(contentEl)
+      .setName('Description')
+      .setDesc('Optional note shown in the expanded list.')
+      .addText((t) =>
+        t.setValue(this.description).onChange((v) => {
+          this.description = v;
+        }),
+      );
+
+    new Setting(contentEl)
       .addButton((b) =>
         b
           .setButtonText('Confirm')
           .setCta()
           .onClick(async () => {
-            await this.onSubmit(this.key, this.value);
+            await this.onSubmit(this.key, this.value, this.description);
             this.submitted = true;
             this.close();
           }),

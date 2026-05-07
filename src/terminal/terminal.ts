@@ -5,7 +5,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal } from '@xterm/xterm';
 import { ItemView, Scope, WorkspaceLeaf, getLanguage } from 'obsidian';
 import { ActionRegistry } from '../actions/actionRegistry';
-import { ConfigManager } from '../config/configManager';
+import { ConfigManager, flattenEnvVars } from '../config/configManager';
 import { ActionButton, SystemButtonCallbacks, Toolbar } from '../ui/toolbar';
 import { registerLinkProvider } from './links';
 import { PtyManager } from './pty';
@@ -177,7 +177,7 @@ export class TerminalView extends ItemView {
     const pty = this.ptyManager.spawn({
       vaultRoot,
       pluginDir: this.pluginDir,
-      env: config.env ?? {},
+      env: flattenEnvVars(config.env),
       locale: config.locale,
       appLocale: getLanguage(),
       cols: this.terminal.cols,

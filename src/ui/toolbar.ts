@@ -1,4 +1,5 @@
 import { App, setIcon, setTooltip } from 'obsidian';
+import { VT_ICON } from './iconRegistry';
 
 export interface ActionButton {
   id: string;

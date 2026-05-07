@@ -1,10 +1,19 @@
 import { App, Notice, PluginSettingTab, Setting, setIcon } from 'obsidian';
 import type VaultTerminalPlugin from '../main';
-import { ConfigManager, LOCALE_OPTIONS, PREDEFINED_PROFILES, ProfileTheme } from '../config/configManager';
+import {
+  ConfigManager,
+  LOCALE_OPTIONS,
+  normalizeEnvEntry,
+  OpenLocation,
+  PREDEFINED_PROFILES,
+  ProfileTheme,
+} from '../config/configManager';
 import { getSystemFonts } from '../utils/fonts';
+import { VT_ICON } from './iconRegistry';
 import { EnvVarModal, ProfileNameModal } from './modals';
 
-type TabId = 'general' | 'profile' | 'toolbar';
+type TabId = 'general' | 'profile' | 'toolbar' | 'snippets';
+type ToolbarDraftItem = { type: 'tool'; toolId: string } | { type: 'divider' } | { type: 'spacer'; units: number };
 
 
 const ANSI_COLORS: Array<{ key: keyof ProfileTheme; label: string }> = [
@@ -28,6 +37,12 @@ const ANSI_COLORS: Array<{ key: keyof ProfileTheme; label: string }> = [
 
 export class VaultTerminalSettingTab extends PluginSettingTab {
   private activeTab: TabId = 'general';
+  private snippetGroups: string[] = ['Common'];
+  private snippetGroupOpen: Record<string, boolean> = {};
+  private toolsSectionOpen: Record<string, boolean> = { builtin: false, custom: false };
+  private envSectionOpen: Record<string, boolean> = { builtin: false, custom: false };
+  private toolbarRowsDraft: ToolbarDraftItem[][] | null = null;
+  private toolbarRowOpen: Record<number, boolean> = {};
 
   constructor(
     app: App,
@@ -46,7 +61,39 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
     const body = containerEl.createDiv({ cls: 'vault-terminal-settings-body' });
     if (this.activeTab === 'general') this.renderGeneralTab(body);
     else if (this.activeTab === 'profile') this.renderProfileTab(body);
-    else this.renderToolbarTab(body);
+    else if (this.activeTab === 'toolbar') this.renderToolbarTab(body);
+    else this.renderSnippetsTab(body);
+  }
+
+  private summarize(items: string[]): string[] {
+    return items;
+  }
+
+  private buildTwoLineDesc(
+    summary: string,
+    detail: string[],
+    showDetail = true,
+    selectable = false,
+  ): DocumentFragment {
+    const frag = document.createDocumentFragment();
+    const summaryEl = document.createElement('div');
+    summaryEl.textContent = summary;
+    frag.append(summaryEl);
+    if (showDetail && detail.length > 0) {
+      const detailEl = document.createElement('div');
+      detailEl.className = 'vault-terminal-settings-desc-detail';
+      if (selectable) {
+        detailEl.addClass('vault-terminal-settings-desc-detail-selectable');
+      }
+      for (const item of detail) {
+        detailEl.createEl('span', {
+          cls: 'vault-terminal-settings-desc-chip',
+          text: item,
+        });
+      }
+      frag.append(detailEl);
+    }
+    return frag;
   }
 
   private renderTabNav(container: HTMLElement): void {
@@ -55,6 +102,7 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
       { id: 'general', label: 'General' },
       { id: 'profile', label: 'Profile' },
       { id: 'toolbar', label: 'Toolbar' },
+      { id: 'snippets', label: 'Snippets' },
     ];
     for (const tab of tabs) {
       const cls = ['vault-terminal-settings-tab'];
@@ -161,61 +209,135 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
             await this.configManager.save();
           }),
       );
+
+    const openBehavior = {
+      location: 'split-down' as OpenLocation,
+      pinned: true,
+      ...this.configManager.get().openBehavior,
+    };
+
+    new Setting(container)
+      .setName('Open location')
+      .setDesc('Where a new terminal leaf should open relative to the currently active tab.')
+      .addDropdown((dd) => {
+        dd.addOptions({
+          tab: 'New tab',
+          'split-right': 'Split right',
+          'split-left': 'Split left',
+          'split-down': 'Split down',
+          'split-up': 'Split up',
+        });
+        dd.setValue(openBehavior.location).onChange(async (v) => {
+          this.configManager.update({
+            openBehavior: { ...openBehavior, location: v as OpenLocation },
+          });
+          await this.configManager.save();
+        });
+        return dd;
+      });
+
+    new Setting(container)
+      .setName('Pin terminal leaf')
+      .setDesc('Keep the terminal pinned so normal note navigation does not replace it.')
+      .addToggle((toggle) =>
+        toggle.setValue(openBehavior.pinned).onChange(async (v) => {
+          this.configManager.update({
+            openBehavior: { ...openBehavior, pinned: v },
+          });
+          await this.configManager.save();
+        }),
+      );
+
   }
 
   private renderEnvSection(container: HTMLElement): void {
     container.createEl('h3', { text: 'Environment Variables' });
 
-    container.createEl('p', {
-      text: 'Built-in (read-only)',
-      cls: 'vault-terminal-settings-section-label',
-    });
-
     const builtinVars = [
       { key: 'VAULT_ROOT', desc: 'Absolute path to the vault root directory' },
       { key: 'OBSIDIAN_PLUGIN_DIR', desc: 'Absolute path to this plugin directory' },
     ];
+    let builtinOpen = this.envSectionOpen.builtin ?? false;
+    const builtinHeader = new Setting(container)
+      .setName(`Built-in (${builtinVars.length})`)
+      .setDesc(this.buildTwoLineDesc('Read-only variables.', this.summarize(builtinVars.map(({ key }) => key)), !builtinOpen, true));
+    builtinHeader.controlEl.createEl('span', { cls: 'vault-terminal-profile-expand-spacer' });
+    builtinHeader.addExtraButton((b) => {
+      b.setIcon(builtinOpen ? 'chevron-up' : 'chevron-down').setTooltip('Expand');
+      b.onClick(() => {
+        builtinOpen = !builtinOpen;
+        this.envSectionOpen.builtin = builtinOpen;
+        const editorEl = container.querySelector('[data-env-section="builtin"]') as HTMLElement | null;
+        editorEl?.toggleClass('is-open', builtinOpen);
+        builtinHeader.setDesc(this.buildTwoLineDesc('Read-only variables.', this.summarize(builtinVars.map(({ key }) => key)), !builtinOpen, true));
+        b.setIcon(builtinOpen ? 'chevron-up' : 'chevron-down');
+      });
+      return b;
+    });
+    const builtinBody = container.createDiv({ cls: 'vault-terminal-profile-inline-editor' });
+    builtinBody.setAttribute('data-env-section', 'builtin');
+    builtinBody.toggleClass('is-open', builtinOpen);
     for (const { key, desc } of builtinVars) {
-      new Setting(container)
+      new Setting(builtinBody)
         .setName(key)
         .setDesc(desc);
     }
-
-    container.createEl('p', {
-      text: 'Custom',
-      cls: 'vault-terminal-settings-section-label',
-    });
+    container.createEl('hr', { cls: 'vault-terminal-settings-hr' });
 
     const env = this.configManager.get().env ?? {};
-    const entries = Object.entries(env);
+    const entries = Object.entries(env).map(([key, entry]) => [key, normalizeEnvEntry(entry)] as const);
+    let customOpen = this.envSectionOpen.custom ?? false;
+    const customHeader = new Setting(container)
+      .setName(`Custom (${entries.length})`)
+      .setDesc(this.buildTwoLineDesc('User-defined environment variables.', this.summarize(entries.map(([key]) => key)), !customOpen, true));
+    customHeader.controlEl.createEl('span', { cls: 'vault-terminal-profile-expand-spacer' });
+    customHeader.addExtraButton((b) => {
+      b.setIcon(customOpen ? 'chevron-up' : 'chevron-down').setTooltip('Expand');
+      b.onClick(() => {
+        customOpen = !customOpen;
+        this.envSectionOpen.custom = customOpen;
+        const editorEl = container.querySelector('[data-env-section="custom"]') as HTMLElement | null;
+        editorEl?.toggleClass('is-open', customOpen);
+        customHeader.setDesc(this.buildTwoLineDesc('User-defined environment variables.', this.summarize(entries.map(([key]) => key)), !customOpen, true));
+        b.setIcon(customOpen ? 'chevron-up' : 'chevron-down');
+      });
+      return b;
+    });
+    const customBody = container.createDiv({ cls: 'vault-terminal-profile-inline-editor' });
+    customBody.setAttribute('data-env-section', 'custom');
+    customBody.toggleClass('is-open', customOpen);
 
     if (entries.length === 0) {
-      container.createEl('p', {
+      customBody.createEl('p', {
         text: 'No environment variables defined.',
         cls: 'vault-terminal-settings-empty',
       });
     }
 
-    for (const [key, value] of entries) {
-      const s = new Setting(container).setName(key);
+    for (const [key, envVar] of entries) {
+      const s = new Setting(customBody).setName(key);
       const sep = s.nameEl.createEl('span', { text: ' = ' });
       sep.style.cssText = 'color:var(--text-faint);font-family:monospace;';
-      const valEl = s.nameEl.createEl('span', { text: value });
+      const valEl = s.nameEl.createEl('span', { text: envVar.value });
       valEl.style.cssText = 'color:var(--text-muted);font-family:monospace;font-weight:normal;';
+      if (envVar.description) {
+        s.setDesc(envVar.description);
+      }
       s.addExtraButton((b) =>
           b.setIcon('pencil').setTooltip('Edit').onClick(() => {
             new EnvVarModal(
               this.app,
-              async (newKey, newValue) => {
+              async (newKey, newValue, newDescription) => {
                 const newEnv = { ...this.configManager.get().env };
                 delete newEnv[key];
-                newEnv[newKey] = newValue;
+                newEnv[newKey] = { value: newValue, description: newDescription.trim() || undefined };
                 this.configManager.update({ env: newEnv });
                 await this.configManager.save();
               },
               () => this.display(),
               key,
-              value,
+              envVar.value,
+              envVar.description ?? '',
             ).open();
           }),
         )
@@ -230,13 +352,16 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
         );
     }
 
-    new Setting(container).addButton((b) =>
+    new Setting(customBody).addButton((b) =>
       b
         .setButtonText('Add variable')
         .setCta()
         .onClick(() => {
-          new EnvVarModal(this.app, async (newKey, newValue) => {
-            const newEnv = { ...this.configManager.get().env, [newKey]: newValue };
+          new EnvVarModal(this.app, async (newKey, newValue, newDescription) => {
+            const newEnv = {
+              ...this.configManager.get().env,
+              [newKey]: { value: newValue, description: newDescription.trim() || undefined },
+            };
             this.configManager.update({ env: newEnv });
             await this.configManager.save();
           }, () => this.display()).open();
@@ -508,6 +633,7 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
       setting.controlEl.createEl('span', { cls: 'vault-terminal-profile-expand-spacer' });
 
       let isOpen = false;
+      setting.setDesc('');
       setting.addExtraButton((b) => {
         b.setIcon('chevron-down').setTooltip('Expand');
         b.onClick(() => {
@@ -647,33 +773,105 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
   // ──────────────────────────────────────────────
 
   private renderToolbarTab(container: HTMLElement): void {
-    this.renderActionsSection(container);
     this.renderToolbarOrderSection(container);
+    this.renderToolsSection(container);
   }
 
-  private renderActionsSection(container: HTMLElement): void {
-    container.createEl('h3', { text: 'Actions' });
+  private renderToolsSection(container: HTMLElement): void {
+    container.createEl('h3', { text: 'Tools' });
+    container.createEl('p', {
+      text: 'Tools are runnable buttons. Most custom tools should reference snippets.',
+      cls: 'vault-terminal-settings-desc',
+    });
 
-    const actions = this.configManager.get().actions ?? [];
+    const builtinTools: Array<{ name: string; icon: string; desc: string }> = [
+      { name: 'Env', icon: 'key', desc: 'Show environment variable helper.' },
+      { name: 'History', icon: 'clock', desc: 'Show command/input history helper.' },
+      { name: 'Profile', icon: 'palette', desc: 'Switch terminal profile quickly.' },
+      { name: 'Fullscreen', icon: 'maximize-2', desc: 'Toggle terminal fullscreen mode.' },
+      { name: 'New Window', icon: 'external-link', desc: 'Open terminal in a separate window.' },
+      { name: 'Note → Terminal', icon: 'file-input', desc: 'Send note content or selection to terminal.' },
+      { name: 'Terminal → Note', icon: 'file-output', desc: 'Capture terminal output into note.' },
+    ];
+    const actions = (this.configManager.get().actions ?? []).filter((action) => action.mode !== 'passthrough');
+    let builtinOpen = this.toolsSectionOpen.builtin ?? false;
+
+    const builtinHeader = new Setting(container)
+      .setName(`Built-in tools (${builtinTools.length})`)
+      .setDesc(this.buildTwoLineDesc('Plugin-provided tools.', this.summarize(builtinTools.map((tool) => tool.name)), !builtinOpen));
+    builtinHeader.controlEl.createEl('span', { cls: 'vault-terminal-profile-expand-spacer' });
+    builtinHeader.addExtraButton((b) => {
+      b.setIcon(builtinOpen ? 'chevron-up' : 'chevron-down').setTooltip('Expand');
+      b.onClick(() => {
+        builtinOpen = !builtinOpen;
+        this.toolsSectionOpen.builtin = builtinOpen;
+        const editorEl = container.querySelector('[data-tools-section="builtin"]') as HTMLElement | null;
+        editorEl?.toggleClass('is-open', builtinOpen);
+        builtinHeader.setDesc(this.buildTwoLineDesc('Plugin-provided tools.', this.summarize(builtinTools.map((tool) => tool.name)), !builtinOpen));
+        b.setIcon(builtinOpen ? 'chevron-up' : 'chevron-down');
+      });
+      return b;
+    });
+
+    const builtinBody = container.createDiv({ cls: 'vault-terminal-profile-inline-editor' });
+    builtinBody.setAttribute('data-tools-section', 'builtin');
+    builtinBody.toggleClass('is-open', builtinOpen);
+
+    for (const tool of builtinTools) {
+      const s = new Setting(builtinBody)
+        .setName(tool.name)
+        .setDesc(tool.desc);
+      const icon = document.createElement('span');
+      icon.style.marginRight = '8px';
+      setIcon(icon, tool.icon);
+      s.nameEl.prepend(icon);
+    }
+
+    container.createEl('hr', { cls: 'vault-terminal-settings-hr' });
+    let customOpen = this.toolsSectionOpen.custom ?? false;
+    const customHeader = new Setting(container)
+      .setName(`Custom tools (${actions.length})`)
+      .setDesc(this.buildTwoLineDesc('User-defined tools for snippets/scripts.', this.summarize(actions.map((action) => action.label)), !customOpen));
+    customHeader.controlEl.createEl('span', { cls: 'vault-terminal-profile-expand-spacer' });
+    customHeader.addExtraButton((b) => {
+      b.setIcon(customOpen ? 'chevron-up' : 'chevron-down').setTooltip('Expand');
+      b.onClick(() => {
+        customOpen = !customOpen;
+        this.toolsSectionOpen.custom = customOpen;
+        const editorEl = container.querySelector('[data-tools-section="custom"]') as HTMLElement | null;
+        editorEl?.toggleClass('is-open', customOpen);
+        customHeader.setDesc(this.buildTwoLineDesc('User-defined tools for snippets/scripts.', this.summarize(actions.map((action) => action.label)), !customOpen));
+        b.setIcon(customOpen ? 'chevron-up' : 'chevron-down');
+      });
+      return b;
+    });
+
+    const customBody = container.createDiv({ cls: 'vault-terminal-profile-inline-editor' });
+    customBody.setAttribute('data-tools-section', 'custom');
+    customBody.toggleClass('is-open', customOpen);
 
     if (actions.length === 0) {
-      container.createEl('p', {
-        text: 'No actions defined.',
+      customBody.createEl('p', {
+        text: 'No custom tools defined.',
         cls: 'vault-terminal-settings-empty',
       });
     }
 
     for (const action of actions) {
-      new Setting(container)
+      const s = new Setting(customBody)
         .setName(action.label)
         .setDesc(`${action.mode}${action.command ? ` · ${action.command}` : ''}`)
         .addExtraButton((b) => b.setIcon('pencil').setTooltip('Edit').onClick(() => {}))
         .addExtraButton((b) => b.setIcon('trash').setTooltip('Delete').onClick(() => {}));
+      const icon = document.createElement('span');
+      icon.style.marginRight = '8px';
+      setIcon(icon, action.icon ?? 'terminal');
+      s.nameEl.prepend(icon);
     }
 
-    new Setting(container).addButton((b) =>
+    new Setting(customBody).addButton((b) =>
       b
-        .setButtonText('Add action')
+        .setButtonText('Add tool')
         .setCta()
         .onClick(() => {}),
     );
@@ -681,61 +879,226 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
 
   private renderToolbarOrderSection(container: HTMLElement): void {
     container.createEl('h3', { text: 'Toolbar Order' });
+    container.createEl('p', { text: 'Add toolbar rows.', cls: 'vault-terminal-settings-desc' });
+
+    const config = this.configManager.get();
+    const actions = config.actions ?? [];
+    const toolActions = actions.filter((a) => a.mode !== 'passthrough');
+    if (!this.toolbarRowsDraft) {
+      const legacy = (config.toolbar ?? []).filter((id) => toolActions.some((a) => a.id === id));
+      this.toolbarRowsDraft = [0, 1].map((i) =>
+        legacy[i] ? [{ type: 'tool', toolId: legacy[i] } as ToolbarDraftItem] : [],
+      );
+      if (!this.toolbarRowsDraft[0][0] && toolActions[0]) {
+        this.toolbarRowsDraft[0] = [{ type: 'tool', toolId: toolActions[0].id }];
+      }
+    }
+
+    this.toolbarRowsDraft.forEach((row, rowIndex) => {
+      const item = row[0];
+      const rowLabel = rowIndex === 0 ? 'Top' : 'Bottom';
+
+      const rowSetting = new Setting(container)
+        .setName(rowLabel)
+        .addExtraButton((b) => {
+          b.setIcon('plus').setTooltip('Tool').onClick(() => {
+            const firstTool = toolActions[0]?.id;
+            if (!firstTool) return;
+            const rows = [...(this.toolbarRowsDraft ?? [])];
+            rows[rowIndex] = [{ type: 'tool', toolId: firstTool }];
+            this.toolbarRowsDraft = rows;
+            this.display();
+          });
+          return b;
+        })
+        .addExtraButton((b) => {
+          b.setIcon(VT_ICON.toolbarDivider).setTooltip('Divider').onClick(() => {
+            const rows = [...(this.toolbarRowsDraft ?? [])];
+            rows[rowIndex] = [{ type: 'divider' }];
+            this.toolbarRowsDraft = rows;
+            this.display();
+          });
+          return b;
+        })
+        .addExtraButton((b) => {
+          b.setIcon('square-dashed').setTooltip('Spacer').onClick(() => {
+            const rows = [...(this.toolbarRowsDraft ?? [])];
+            rows[rowIndex] = [{ type: 'spacer', units: 1 }];
+            this.toolbarRowsDraft = rows;
+            this.display();
+          });
+          return b;
+        });
+      rowSetting.controlEl.createEl('span', { cls: 'vault-terminal-profile-expand-spacer' });
+      rowSetting.controlEl.createEl('span', { cls: 'vault-terminal-profile-expand-spacer' });
+      rowSetting.controlEl.createEl('span', { cls: 'vault-terminal-profile-expand-spacer' });
+      rowSetting.addToggle((toggle) =>
+        toggle.setValue(rowIndex === 0 ? true : !!item).onChange((v) => {
+          const rows = [...(this.toolbarRowsDraft ?? [])];
+          if (!v) {
+            if (rowIndex === 0) return;
+            rows[rowIndex] = [];
+          } else if (!rows[rowIndex][0]) {
+            const firstTool = toolActions[0]?.id;
+            if (firstTool) rows[rowIndex] = [{ type: 'tool', toolId: firstTool }];
+          }
+          this.toolbarRowsDraft = rows;
+          this.display();
+        }),
+      );
+      rowSetting.addExtraButton((b) => {
+        const isOpen = this.toolbarRowOpen[rowIndex] ?? false;
+        b.setIcon(isOpen ? 'chevron-up' : 'chevron-down').setTooltip('Expand');
+        b.onClick(() => {
+          const next = !(this.toolbarRowOpen[rowIndex] ?? false);
+          this.toolbarRowOpen[rowIndex] = next;
+          const editorEl = container.querySelector(`[data-toolbar-row="${rowIndex}"]`) as HTMLElement | null;
+          editorEl?.toggleClass('is-open', next);
+          b.setIcon(next ? 'chevron-up' : 'chevron-down');
+        });
+        return b;
+      });
+      const rowBody = container.createDiv({ cls: 'vault-terminal-profile-inline-editor' });
+      rowBody.setAttribute('data-toolbar-row', String(rowIndex));
+      rowBody.toggleClass('is-open', this.toolbarRowOpen[rowIndex] ?? false);
+      if (item?.type === 'tool') {
+        let currentToolId = item.toolId;
+        new Setting(rowBody)
+          .setName('Tool')
+          .addDropdown((dd) => {
+            for (const tool of toolActions) dd.addOption(tool.id, tool.label);
+            dd.setValue(currentToolId).onChange((v) => {
+              currentToolId = v;
+            });
+            return dd;
+          })
+          .addExtraButton((b) =>
+            b.setIcon('check').setTooltip('Apply').onClick(() => {
+              const rows = [...(this.toolbarRowsDraft ?? [])];
+              rows[rowIndex] = [{ type: 'tool', toolId: currentToolId }];
+              this.toolbarRowsDraft = rows;
+              this.display();
+            }),
+          );
+      } else if (item?.type === 'spacer') {
+        let units = String(item.units);
+        new Setting(rowBody)
+          .setName('Spacer units')
+          .addText((t) => t.setValue(units).onChange((v) => { units = v; }))
+          .addExtraButton((b) =>
+            b.setIcon('check').setTooltip('Apply').onClick(() => {
+              const parsed = Math.max(1, parseInt(units, 10) || 1);
+              const rows = [...(this.toolbarRowsDraft ?? [])];
+              rows[rowIndex] = [{ type: 'spacer', units: parsed }];
+              this.toolbarRowsDraft = rows;
+              this.display();
+            }),
+          );
+      } else if (item?.type === 'divider') {
+        rowBody.createEl('p', { text: 'Divider', cls: 'vault-terminal-settings-empty' });
+      }
+    });
+
+    new Setting(container)
+        .setName('Reset to defaults')
+        .setDesc('Restore toolbar rows from current registered toolbar tools.')
+        .addExtraButton((b) =>
+          b.setIcon('rotate-ccw').setTooltip('Reset').onClick(() => {
+            const legacy = (this.configManager.get().toolbar ?? []).filter((id) => toolActions.some((a) => a.id === id));
+            this.toolbarRowsDraft = [0, 1].map((i) =>
+              legacy[i] ? [{ type: 'tool', toolId: legacy[i] } as ToolbarDraftItem] : [],
+            );
+            if (!this.toolbarRowsDraft[0][0] && toolActions[0]) {
+              this.toolbarRowsDraft[0] = [{ type: 'tool', toolId: toolActions[0].id }];
+            }
+            new Notice('Toolbar rows reset.');
+            this.display();
+          }),
+        );
+  }
+
+  private renderSnippetsTab(container: HTMLElement): void {
+    container.createEl('h3', { text: 'Snippets' });
     container.createEl('p', {
-      text: 'Actions shown in the toolbar, in order. Toggle visibility or reorder.',
+      text: 'Reusable text blocks for terminal input. Use {{key}} placeholders for prompt-time substitution.',
       cls: 'vault-terminal-settings-desc',
     });
 
-    const config = this.configManager.get();
-    const toolbarIds = config.toolbar ?? [];
-    const actions = config.actions ?? [];
+    const actions = this.configManager.get().actions ?? [];
+    const snippetLike = actions.filter((action) => action.mode === 'template');
+    const detectedGroups = Array.from(
+      new Set(snippetLike.map((action) => action.group?.trim() || 'Common')),
+    );
+    const mergedGroups = Array.from(new Set(['Common', ...this.snippetGroups, ...detectedGroups]))
+      .filter((g) => g.trim().length > 0)
+      .sort((a, b) => a.localeCompare(b));
+    this.snippetGroups = mergedGroups;
 
-    if (toolbarIds.length === 0) {
-      container.createEl('p', {
-        text: 'No actions added to toolbar.',
-        cls: 'vault-terminal-settings-empty',
+    new Setting(container)
+      .setName('Groups')
+      .setDesc(this.buildTwoLineDesc('Create free-form groups and manage snippets inside each section.', [], false))
+      .addButton((b) =>
+        b
+          .setButtonText('Add group')
+          .setCta()
+          .onClick(() => {
+            const name = window.prompt('Group name');
+            if (!name) return;
+            const group = name.trim();
+            if (!group) return;
+            if (this.snippetGroups.includes(group)) return;
+            this.snippetGroups = [...this.snippetGroups, group];
+            this.display();
+          }),
+      );
+
+    for (const group of this.snippetGroups) {
+      const groupSnippets = snippetLike.filter((action) => (action.group?.trim() || 'Common') === group);
+      let isOpen = this.snippetGroupOpen[group] ?? false;
+      const setting = new Setting(container)
+        .setName(group)
+        .setDesc(this.buildTwoLineDesc(`${groupSnippets.length} snippet(s)`, this.summarize(groupSnippets.map((action) => action.label)), !isOpen));
+      setting.controlEl.createEl('span', { cls: 'vault-terminal-profile-expand-spacer' });
+      setting.addExtraButton((b) => {
+        b.setIcon(isOpen ? 'chevron-up' : 'chevron-down').setTooltip('Expand');
+        b.onClick(() => {
+          isOpen = !isOpen;
+          this.snippetGroupOpen[group] = isOpen;
+          const editorEl = container.querySelector(`[data-snippet-group="${group}"]`) as HTMLElement | null;
+          editorEl?.toggleClass('is-open', isOpen);
+          setting.setDesc(this.buildTwoLineDesc(`${groupSnippets.length} snippet(s)`, this.summarize(groupSnippets.map((action) => action.label)), !isOpen));
+          b.setIcon(isOpen ? 'chevron-up' : 'chevron-down');
+        });
+        return b;
       });
-    }
 
-    for (const id of toolbarIds) {
-      const action = actions.find((a) => a.id === id);
-      if (!action) continue;
+      const groupBody = container.createDiv({ cls: 'vault-terminal-profile-inline-editor' });
+      groupBody.setAttribute('data-snippet-group', group);
+      groupBody.toggleClass('is-open', isOpen);
+      if (groupSnippets.length === 0) {
+        groupBody.createEl('p', {
+          text: 'No snippets in this group.',
+          cls: 'vault-terminal-settings-empty',
+        });
+      }
 
-      new Setting(container)
-        .setName(action.label)
-        .setDesc(id)
-        .addToggle((toggle) =>
-          toggle.setValue(toolbarIds.includes(id)).onChange(async (v) => {
-            const toolbar = this.configManager.get().toolbar ?? [];
-            const newToolbar = v ? [...toolbar, id] : toolbar.filter((t) => t !== id);
-            this.configManager.update({ toolbar: newToolbar });
-            await this.configManager.save();
-          }),
-        )
-        .addExtraButton((b) =>
-          b.setIcon('arrow-up').setTooltip('Move up').onClick(async () => {
-            const toolbar = [...(this.configManager.get().toolbar ?? [])];
-            const idx = toolbar.indexOf(id);
-            if (idx > 0) {
-              [toolbar[idx - 1], toolbar[idx]] = [toolbar[idx], toolbar[idx - 1]];
-              this.configManager.update({ toolbar });
-              await this.configManager.save();
-              this.display();
-            }
-          }),
-        )
-        .addExtraButton((b) =>
-          b.setIcon('arrow-down').setTooltip('Move down').onClick(async () => {
-            const toolbar = [...(this.configManager.get().toolbar ?? [])];
-            const idx = toolbar.indexOf(id);
-            if (idx >= 0 && idx < toolbar.length - 1) {
-              [toolbar[idx], toolbar[idx + 1]] = [toolbar[idx + 1], toolbar[idx]];
-              this.configManager.update({ toolbar });
-              await this.configManager.save();
-              this.display();
-            }
-          }),
-        );
+      for (const action of groupSnippets) {
+        const preview = action.command?.trim()
+          ? action.command.trim().split('\n').slice(0, 2).join(' / ')
+          : '(empty)';
+        new Setting(groupBody)
+          .setName(action.label)
+          .setDesc(preview)
+          .addExtraButton((b) => b.setIcon('pencil').setTooltip('Edit').onClick(() => {}))
+          .addExtraButton((b) => b.setIcon('trash').setTooltip('Delete').onClick(() => {}));
+      }
+
+      new Setting(groupBody).addButton((b) =>
+        b
+          .setButtonText('Add snippet')
+          .setCta()
+          .onClick(() => {}),
+      );
     }
   }
 }

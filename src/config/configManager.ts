@@ -20,6 +20,7 @@ export interface ActionDef {
   label: string;
   icon?: string;
   mode: ActionMode;
+  group?: string;
   description?: string;
   command?: string;
   script?: string;
@@ -68,7 +69,21 @@ export interface AddToNoteConfig {
   askLines: boolean;
 }
 
+export type OpenLocation = 'tab' | 'split-right' | 'split-left' | 'split-down' | 'split-up';
+
+export interface OpenBehaviorConfig {
+  location: OpenLocation;
+  pinned: boolean;
+}
+
 export type LocaleSetting = 'system' | 'app' | string;
+
+export interface EnvVarConfig {
+  value: string;
+  description?: string;
+}
+
+export type EnvVarEntry = string | EnvVarConfig;
 
 export const LOCALE_OPTIONS: Record<string, string> = {
   system: '⚙ System default',
@@ -177,6 +192,17 @@ export function resolveLocale(setting: LocaleSetting, appLocale: string): string
   return setting;
 }
 
+export function normalizeEnvEntry(entry: EnvVarEntry | undefined): EnvVarConfig {
+  if (typeof entry === 'string') return { value: entry };
+  return { value: entry?.value ?? '', description: entry?.description?.trim() || undefined };
+}
+
+export function flattenEnvVars(env?: Record<string, EnvVarEntry>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(env ?? {}).map(([key, entry]) => [key, normalizeEnvEntry(entry).value]),
+  );
+}
+
 export interface VaultTerminalConfig {
   version?: string;
   vaultRoot?: boolean;
@@ -185,7 +211,8 @@ export interface VaultTerminalConfig {
   terminalOptions?: Record<string, unknown>;
   profiles?: Record<string, Profile>;
   defaultProfile?: string;
-  env?: Record<string, string>;
+  env?: Record<string, EnvVarEntry>;
+  openBehavior?: OpenBehaviorConfig;
   addToNote?: AddToNoteConfig;
   history?: HistoryConfig;
   actions?: ActionDef[];
@@ -552,6 +579,7 @@ const DEFAULT_CONFIG: VaultTerminalConfig = {
   },
   defaultProfile: 'basic',
   env: {},
+  openBehavior: { location: 'split-down', pinned: true },
   addToNote: { lines: 200, askLines: true },
   history: { mode: 'none' },
   actions: [],
