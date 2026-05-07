@@ -1,6 +1,7 @@
 import { FitAddon } from '@xterm/addon-fit';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { WebLinksAddon } from '@xterm/addon-web-links';
+import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal } from '@xterm/xterm';
 import { ItemView, Scope, WorkspaceLeaf } from 'obsidian';
 import { ActionRegistry } from '../actions/actionRegistry';
@@ -115,6 +116,7 @@ export class TerminalView extends ItemView {
     );
     this.terminal.unicode.activeVersion = '11';
     this.terminal.open(xtermEl);
+    this.terminal.loadAddon(new WebglAddon());
     this.fitAddon.fit();
 
     registerLinkProvider(this.terminal, this.app);
