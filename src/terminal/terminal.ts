@@ -3,7 +3,7 @@ import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal } from '@xterm/xterm';
-import { ItemView, Scope, WorkspaceLeaf } from 'obsidian';
+import { ItemView, Scope, WorkspaceLeaf, getLanguage } from 'obsidian';
 import { ActionRegistry } from '../actions/actionRegistry';
 import { ConfigManager } from '../config/configManager';
 import { ActionButton, SystemButtonCallbacks, Toolbar } from '../ui/toolbar';
@@ -26,6 +26,7 @@ function shellEscape(p: string): string {
 export class TerminalView extends ItemView {
   private terminal: Terminal | null = null;
   private fitAddon: FitAddon | null = null;
+  private webglAddon: WebglAddon | null = null;
   private ptyManager: PtyManager;
   private toolbar: Toolbar | null = null;
   private terminalScope: Scope;
@@ -95,7 +96,22 @@ export class TerminalView extends ItemView {
 
     this.fitAddon = new FitAddon();
     const unicode11 = new Unicode11Addon();
-    this.terminal = new Terminal({ allowProposedApi: true });
+    const opts = this.configManager.get().terminalOptions ?? {};
+    const initConfig = this.configManager.get();
+    const profile = initConfig.profiles?.[initConfig.defaultProfile ?? 'basic'];
+    const obsidianBg = getComputedStyle(document.body).getPropertyValue('--background-primary').trim();
+    const resolvedBg = initConfig.profiles?.[initConfig.defaultProfile ?? 'basic']?.matchObsidianBackground
+      ? (obsidianBg || '#1e1e1e')
+      : (profile?.theme?.background ?? '#1e1e1e');
+    this.terminal = new Terminal({
+      allowProposedApi: true,
+      fontFamily: (opts['fontFamily'] as string | undefined) || undefined,
+      fontSize: this.resolvedFontSize(),
+      lineHeight: (opts['lineHeight'] as number | undefined) || 1.0,
+      cursorStyle: (opts['cursorStyle'] as 'block' | 'underline' | 'bar' | undefined) || 'block',
+      scrollback: (opts['scrollback'] as number | undefined) || 1000,
+      theme: { ...profile?.theme, background: resolvedBg },
+    });
     this.terminal.loadAddon(this.fitAddon);
     this.terminal.loadAddon(unicode11);
     this.terminal.loadAddon(
@@ -116,10 +132,36 @@ export class TerminalView extends ItemView {
     );
     this.terminal.unicode.activeVersion = '11';
     this.terminal.open(xtermEl);
-    this.terminal.loadAddon(new WebglAddon());
+    xtermEl.style.background = resolvedBg;
+    this.webglAddon = new WebglAddon();
+    this.webglAddon.onContextLoss(() => {
+      this.webglAddon?.dispose();
+    });
+    this.terminal.loadAddon(this.webglAddon);
     this.fitAddon.fit();
 
     registerLinkProvider(this.terminal, this.app);
+
+    const unsubscribe = this.configManager.onChanged(() => {
+      if (!this.terminal) return;
+      const o = this.configManager.get().terminalOptions ?? {};
+      const p = this.configManager.get().profiles?.[this.configManager.get().defaultProfile ?? 'basic'];
+      this.terminal.options.fontFamily = (o['fontFamily'] as string | undefined) || undefined;
+      this.terminal.options.fontSize = this.resolvedFontSize();
+      this.terminal.options.lineHeight = (o['lineHeight'] as number | undefined) || 1.0;
+      this.terminal.options.cursorStyle = (o['cursorStyle'] as 'block' | 'underline' | 'bar' | undefined) || 'block';
+      this.terminal.options.scrollback = (o['scrollback'] as number | undefined) || 1000;
+      if (p) {
+        const bg = p.matchObsidianBackground
+          ? (getComputedStyle(document.body).getPropertyValue('--background-primary').trim() || '#1e1e1e')
+          : (p.theme.background ?? '#1e1e1e');
+        this.terminal.options.theme = { ...p.theme, background: bg };
+        xtermEl.style.background = bg;
+      }
+      this.terminal.clearTextureAtlas?.();
+      requestAnimationFrame(() => this.fitAddon?.fit());
+    });
+    this.register(unsubscribe);
 
     if (this.terminal.textarea) {
       this.terminal.textarea.addEventListener('focus', () =>
@@ -131,10 +173,13 @@ export class TerminalView extends ItemView {
     }
 
     const vaultRoot = this.configManager.getVaultRoot();
+    const config = this.configManager.get();
     const pty = this.ptyManager.spawn({
       vaultRoot,
       pluginDir: this.pluginDir,
-      env: this.configManager.get().env ?? {},
+      env: config.env ?? {},
+      locale: config.locale,
+      appLocale: getLanguage(),
       cols: this.terminal.cols,
       rows: this.terminal.rows,
     });
@@ -218,6 +263,11 @@ export class TerminalView extends ItemView {
   handlePassthrough(action: string): void {
     if (action === 'addTerminalOutputToNote') this.addTerminalOutputToNote();
     else if (action === 'sendSelectedTextToTerminal') this.sendNoteToTerminal();
+  }
+
+  private resolvedFontSize(): number {
+    const cfg = this.configManager.get();
+    return (cfg.terminalOptions?.['fontSize'] as number | undefined) || 12;
   }
 
   private showEnvPopup(): void {}

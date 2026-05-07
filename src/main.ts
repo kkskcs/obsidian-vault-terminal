@@ -3,6 +3,7 @@ import * as path from 'path';
 import { ActionRegistry } from './actions/actionRegistry';
 import { ConfigManager } from './config/configManager';
 import { TERMINAL_VIEW_TYPE, TerminalView } from './terminal/terminal';
+import { VaultTerminalSettingTab } from './ui/settingsTab';
 
 export default class VaultTerminalPlugin extends Plugin {
   private configManager!: ConfigManager;
@@ -26,6 +27,8 @@ export default class VaultTerminalPlugin extends Plugin {
       name: 'Open Vault Terminal',
       callback: () => this.activateView(),
     });
+
+    this.addSettingTab(new VaultTerminalSettingTab(this.app, this, this.configManager));
 
     this.actionRegistry.registerCommands(
       (id, name, callback) => this.addCommand({ id, name, callback }),

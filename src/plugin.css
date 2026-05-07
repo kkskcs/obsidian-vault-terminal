@@ -76,6 +76,8 @@
   overflow: hidden;
   position: relative;
   isolation: isolate;
+  padding: 6px 8px;
+  box-sizing: border-box;
 }
 
 .vault-terminal-xterm .xterm {
@@ -118,4 +120,159 @@
   justify-content: flex-end;
   gap: 8px;
   margin-top: 16px;
+}
+
+/* Settings Tab */
+
+.vault-terminal-settings-nav {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  padding-bottom: 8px;
+}
+
+.vault-terminal-settings-tab {
+  padding: 4px 16px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.vault-terminal-settings-tab:hover {
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.vault-terminal-settings-tab.is-active {
+  background-color: var(--background-modifier-active-hover);
+  color: var(--text-normal);
+  font-weight: 600;
+}
+
+.vault-terminal-settings-empty {
+  color: var(--text-faint);
+  font-size: var(--font-ui-small);
+  margin: 4px 0 12px;
+}
+
+.vault-terminal-settings-desc {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  margin: 0 0 12px;
+}
+
+.vault-terminal-settings-hr {
+  border: none;
+  border-top: 1px solid var(--background-modifier-border);
+  margin: 12px 0;
+}
+
+.vault-terminal-settings-section-label {
+  font-size: var(--font-ui-small);
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: 12px 0 4px;
+}
+
+/* Profile tab */
+
+.vault-terminal-settings-inline-label {
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
+.vault-terminal-profile-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--background-modifier-border);
+  margin-left: 8px;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.vault-terminal-profile-default-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+  border-radius: 10px;
+  padding: 1px 6px;
+  flex-shrink: 0;
+}
+
+.vault-terminal-profile-expand-spacer {
+  display: inline-block;
+  width: 8px;
+  flex-shrink: 0;
+}
+
+.vault-terminal-profile-expand-btn {
+  transition: transform 0.15s ease;
+}
+
+.vault-terminal-profile-expand-btn.is-open {
+  transform: rotate(90deg);
+}
+
+.vault-terminal-profile-inline-editor {
+  display: none;
+  padding: 8px 0 8px 16px;
+  border-left: 2px solid var(--background-modifier-border);
+  margin: 0 0 8px 8px;
+}
+
+.vault-terminal-profile-inline-editor.is-open {
+  display: block;
+}
+
+/* ANSI color grid */
+
+.vault-terminal-ansi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0 50px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: var(--background-secondary);
+  border-radius: 6px;
+}
+
+.vault-terminal-ansi-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vault-terminal-ansi-label {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  flex: 1;
+  min-width: 0;
+}
+
+.vault-terminal-ansi-picker {
+  --swatch-width: 20px;
+  --swatch-height: 20px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.vault-terminal-icon-btn[disabled],
+.vault-terminal-icon-btn.is-disabled,
+.setting-editor-extra-setting-button[disabled],
+.setting-editor-extra-setting-button.is-disabled,
+.clickable-icon[disabled],
+.clickable-icon.is-disabled {
+  opacity: 0.3 !important;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
 }

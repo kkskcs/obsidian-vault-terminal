@@ -1,10 +1,13 @@
 import type * as nodePty from 'node-pty';
 import * as path from 'path';
+import { LocaleSetting, resolveLocale } from '../config/configManager';
 
 interface PtyOptions {
   vaultRoot: string;
   pluginDir: string;
   env?: Record<string, string>;
+  locale?: LocaleSetting;
+  appLocale?: string;
   cols?: number;
   rows?: number;
 }
@@ -14,10 +17,15 @@ export class PtyManager {
 
   spawn(options: PtyOptions): nodePty.IPty {
     const shell = this.detectShell();
-    const { vaultRoot, pluginDir, env = {}, cols = 80, rows = 24 } = options;
+    const { vaultRoot, pluginDir, env = {}, locale = 'system', appLocale = 'en', cols = 80, rows = 24 } = options;
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const nodePtyModule: typeof nodePty = require(path.join(pluginDir, 'node_modules', 'node-pty'));
+
+    const resolvedLocale = resolveLocale(locale, appLocale);
+    const localeEnv: Record<string, string> = resolvedLocale
+      ? { LANG: resolvedLocale, LC_ALL: resolvedLocale }
+      : { LC_CTYPE: 'UTF-8' };
 
     this.pty = nodePtyModule.spawn(shell, [], {
       name: 'xterm-256color',
@@ -29,8 +37,8 @@ export class PtyManager {
           Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined),
         ),
         VAULT_ROOT: vaultRoot,
-        LANG: 'en_US.UTF-8',
-        LC_ALL: 'en_US.UTF-8',
+        OBSIDIAN_PLUGIN_DIR: pluginDir,
+        ...localeEnv,
         ...env,
       },
     });
