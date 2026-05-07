@@ -2,10 +2,12 @@
   "name": "obsidian-vault-terminal",
   "version": "1.0.0",
   "description": "Obsidian plugin: embedded terminal with action buttons and path-link conversion",
-  "main": "main.js",
+  "main": "dist/main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
+    "clean": "rm -rf dist",
+    "link-vault": "node scripts/link-vault.mjs",
     "version": "node version-bump.mjs && git add manifest.json versions.json",
     "format": "prettier --write \"src/**/*.ts\""
   },
@@ -13,10 +15,7 @@
   "author": "",
   "license": "MIT",
   "files": [
-    "main.js",
-    "styles.css",
-    "manifest.json",
-    "python"
+    "dist"
   ],
   "dependencies": {
     "@xterm/addon-fit": "^0.10.0",

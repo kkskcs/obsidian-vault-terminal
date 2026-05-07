@@ -11,6 +11,28 @@ if you want to view the source, please visit the github repository of this plugi
 `;
 
 const prod = process.argv[2] === "production";
+const distDir = "dist";
+
+function ensureDist() {
+	fs.mkdirSync(distDir, { recursive: true });
+}
+
+function copyManifest() {
+	ensureDist();
+	fs.copyFileSync("manifest.json", path.join(distDir, "manifest.json"));
+}
+
+function copyPythonHelper() {
+	ensureDist();
+	const target = path.join(distDir, "python");
+	fs.rmSync(target, { recursive: true, force: true });
+	fs.cpSync("python", target, { recursive: true });
+}
+
+function copyStaticAssets() {
+	copyManifest();
+	copyPythonHelper();
+}
 
 const context = await esbuild.context({
 	banner: {
@@ -39,20 +61,22 @@ const context = await esbuild.context({
 	logLevel: "info",
 	sourcemap: prod ? false : "inline",
 	treeShaking: true,
-	outfile: "main.js",
+	outfile: path.join(distDir, "main.js"),
 	minify: prod,
 });
 
 function buildStyles() {
+	ensureDist();
 	const xtermCss = fs.readFileSync(
 		path.resolve("node_modules/@xterm/xterm/css/xterm.css"),
 		"utf8"
 	);
 	const pluginCss = fs.readFileSync("src/plugin.css", "utf8");
-	fs.writeFileSync("styles.css", xtermCss + "\n" + pluginCss);
+	fs.writeFileSync(path.join(distDir, "styles.css"), xtermCss + "\n" + pluginCss);
 }
 
 buildStyles();
+copyStaticAssets();
 
 if (prod) {
 	await context.rebuild();
@@ -61,6 +85,10 @@ if (prod) {
 	await context.watch();
 	fs.watchFile("src/plugin.css", { interval: 300 }, () => {
 		buildStyles();
-		console.log("[css] styles.css rebuilt");
+		console.log("[css] dist/styles.css rebuilt");
+	});
+	fs.watchFile("manifest.json", { interval: 300 }, () => {
+		copyManifest();
+		console.log("[manifest] dist/manifest.json rebuilt");
 	});
 }
