@@ -9,6 +9,7 @@ interface PtyOptions {
   env?: Record<string, string>;
   locale?: LocaleSetting;
   appLocale?: string;
+  pythonPath?: string;
   cols?: number;
   rows?: number;
 }
@@ -48,8 +49,10 @@ class PythonPtyProcess implements PtyProcess {
     });
   }
 
+  private number: number;
+
   onData(callback: (data: string) => void): void {
-    this.dataCallbacks.push(callback);
+    this.number = this.dataCallbacks.push(callback);
   }
 
   onExit(callback: (event: PtyExitEvent) => void): void {
@@ -134,13 +137,22 @@ export class PtyManager {
 
   async spawn(options: PtyOptions): Promise<PtyProcess> {
     const { shell, args } = this.detectShell();
-    const { vaultRoot, pluginDir, env = {}, locale = 'system', appLocale = 'en', cols = 80, rows = 24 } = options;
+    const {
+      vaultRoot,
+      pluginDir,
+      env = {},
+      locale = 'system',
+      appLocale = 'en',
+      pythonPath,
+      cols = 80,
+      rows = 24,
+    } = options;
     const resolvedLocale = resolveLocale(locale, appLocale);
     const localeEnv: Record<string, string> = resolvedLocale
       ? { LANG: resolvedLocale, LC_ALL: resolvedLocale }
       : { LC_CTYPE: 'UTF-8' };
 
-    const helper = spawnProcess(this.detectPython(), [path.join(pluginDir, 'python', 'pty_helper.py')], {
+    const helper = spawnProcess(this.detectPython(pythonPath), [path.join(pluginDir, 'python', 'pty_helper.py')], {
       cwd: vaultRoot,
       stdio: 'pipe',
       windowsHide: true,
@@ -205,11 +217,9 @@ export class PtyManager {
     return { shell, args: [] };
   }
 
-  private detectPython(): string {
-    if (process.env.VAULT_TERMINAL_PYTHON) {
-      return process.env.VAULT_TERMINAL_PYTHON;
-    }
-
+  private detectPython(pythonPath?: string): string {
+    if (pythonPath) return pythonPath;
+    if (process.env.VAULT_TERMINAL_PYTHON) return process.env.VAULT_TERMINAL_PYTHON;
     return process.platform === 'win32' ? 'py' : 'python3';
   }
 }

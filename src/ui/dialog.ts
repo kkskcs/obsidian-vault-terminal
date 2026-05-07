@@ -1,5 +1,6 @@
 import { App, Modal } from 'obsidian';
 import { ActionParam } from '../config/configManager';
+import { openExternalUrl, RUNTIME_SETUP_URL } from './links';
 
 export class ParamDialog extends Modal {
   private result: Record<string, string> = {};
@@ -77,5 +78,43 @@ export class ParamDialog extends Modal {
   private submit(): void {
     this.close();
     this.onSubmit(this.result);
+  }
+}
+
+export class RuntimeRequiredDialog extends Modal {
+  constructor(
+    app: App,
+    private readonly onOpenRuntimeSettings: () => void,
+  ) {
+    super(app);
+  }
+
+  onOpen(): void {
+    const { contentEl } = this;
+    contentEl.empty();
+
+    contentEl.createEl('h2', { text: 'Vault Terminal Runtime Required' });
+    contentEl.createEl('p', {
+      text: 'Vault Terminal needs a Python runtime before it can start a terminal session. Open Runtime settings to check the current status and setup options.',
+    });
+    contentEl.createEl('p').createEl('a', {
+      text: 'README runtime setup guide',
+      href: RUNTIME_SETUP_URL,
+    }).addEventListener('click', (event) => {
+      event.preventDefault();
+      openExternalUrl(RUNTIME_SETUP_URL);
+    });
+
+    const btnRow = contentEl.createDiv({ cls: 'vault-terminal-dialog-buttons' });
+    btnRow.createEl('button', { text: 'OK' }).addEventListener('click', () => this.close());
+    const settingsBtn = btnRow.createEl('button', { text: 'Open Runtime Settings', cls: 'mod-cta' });
+    settingsBtn.addEventListener('click', () => {
+      this.close();
+      this.onOpenRuntimeSettings();
+    });
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
   }
 }

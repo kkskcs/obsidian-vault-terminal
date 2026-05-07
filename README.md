@@ -14,15 +14,15 @@ It is a learning-oriented plugin project developed with AI-assisted coding workf
 
 ## Installation
 
-> Not yet available on the Obsidian Community Plugin marketplace.
-
-1. Download `main.js`, `manifest.json`, `styles.css`, and `python/` from the latest release
-2. Copy them to `<vault>/.obsidian/plugins/vault-terminal/`
-3. Enable the plugin in Obsidian → Settings → Community plugins
+Not yet available on the Obsidian Community Plugin marketplace.
 
 ## Usage
 
 Open the terminal via the ribbon icon or command palette (`Open Vault Terminal`).
+
+### Runtime Status
+
+Open `Settings > Vault Terminal > Runtime` to check the detected Python backend and set a custom Python path.
 
 ### Action Buttons
 
@@ -56,6 +56,60 @@ Drag files from Finder/Explorer or the Obsidian file explorer into the terminal.
 
 - Obsidian 0.15.0+
 - Desktop only (macOS, Linux, Windows)
+
+## Runtime Setup
+
+Vault Terminal uses a Python helper to create PTY shell sessions.
+
+If the terminal cannot start, Vault Terminal shows a runtime dialog with a shortcut to the Runtime settings tab and this setup guide.
+
+Python is resolved in this order:
+
+1. `Settings > Vault Terminal > Runtime > Python path`
+2. `VAULT_TERMINAL_PYTHON` environment variable
+3. `py` on Windows
+4. `python3` on macOS/Linux
+
+### macOS
+
+Install Python 3, then reopen Obsidian and try again.
+
+```sh
+xcode-select --install
+```
+
+Alternatives:
+
+```sh
+brew install python
+```
+
+### Linux
+
+Install Python 3 with your distribution package manager, then reopen Obsidian and try again.
+
+```sh
+sudo apt install python3
+```
+
+```sh
+sudo dnf install python3
+```
+
+```sh
+sudo pacman -S python
+```
+
+### Windows
+
+Install Python and pywinpty, then reopen Obsidian and try again.
+
+```powershell
+winget install Python.Python
+py -m pip install pywinpty
+```
+
+If Python is not on `PATH`, open `Settings > Vault Terminal > Runtime` and set the Python path manually.
 
 ## License
 

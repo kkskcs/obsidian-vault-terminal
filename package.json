@@ -12,7 +12,7 @@
     "format": "prettier --write \"src/**/*.ts\""
   },
   "keywords": [],
-  "author": "",
+  "author": "kkskcs",
   "license": "MIT",
   "files": [
     "dist"

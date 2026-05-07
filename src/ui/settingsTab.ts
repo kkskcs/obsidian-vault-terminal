@@ -8,11 +8,16 @@ import {
   PREDEFINED_PROFILES,
   ProfileTheme,
 } from '../config/configManager';
+import {
+  checkRuntimeStatus,
+  RuntimeStatus,
+} from '../terminal/pythonRuntime';
 import { getSystemFonts } from '../utils/fonts';
 import { VT_ICON } from './iconRegistry';
+import { AUTHOR_NAME, openExternalUrl, REPOSITORY_URL, RUNTIME_SETUP_URL } from './links';
 import { EnvVarModal, ProfileNameModal } from './modals';
 
-type TabId = 'general' | 'profile' | 'toolbar' | 'snippets';
+type TabId = 'general' | 'profile' | 'toolbar' | 'snippets' | 'runtime' | 'about';
 type ToolbarDraftItem = { type: 'tool'; toolId: string } | { type: 'divider' } | { type: 'spacer'; units: number };
 
 
@@ -43,13 +48,16 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
   private envSectionOpen: Record<string, boolean> = { builtin: false, custom: false };
   private toolbarRowsDraft: ToolbarDraftItem[][] | null = null;
   private toolbarRowOpen: Record<number, boolean> = {};
+  private runtimeStatus: RuntimeStatus | null = null;
+  private runtimeStatusLoading = false;
+  private runtimeLastChecked: string | null = null;
 
   constructor(
     app: App,
-    plugin: VaultTerminalPlugin,
+    private readonly vaultTerminalPlugin: VaultTerminalPlugin,
     private readonly configManager: ConfigManager,
   ) {
-    super(app, plugin);
+    super(app, vaultTerminalPlugin);
   }
 
   display(): void {
@@ -62,7 +70,14 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
     if (this.activeTab === 'general') this.renderGeneralTab(body);
     else if (this.activeTab === 'profile') this.renderProfileTab(body);
     else if (this.activeTab === 'toolbar') this.renderToolbarTab(body);
-    else this.renderSnippetsTab(body);
+    else if (this.activeTab === 'snippets') this.renderSnippetsTab(body);
+    else if (this.activeTab === 'runtime') this.renderRuntimeTab(body);
+    else this.renderAboutTab(body);
+  }
+
+  openRuntimeTab(): void {
+    this.activeTab = 'runtime';
+    this.display();
   }
 
   private summarize(items: string[]): string[] {
@@ -103,6 +118,8 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
       { id: 'profile', label: 'Profile' },
       { id: 'toolbar', label: 'Toolbar' },
       { id: 'snippets', label: 'Snippets' },
+      { id: 'runtime', label: 'Runtime' },
+      { id: 'about', label: 'About' },
     ];
     for (const tab of tabs) {
       const cls = ['vault-terminal-settings-tab'];
@@ -1100,5 +1117,141 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
           .onClick(() => {}),
       );
     }
+  }
+
+  private renderRuntimeTab(container: HTMLElement): void {
+    container.createEl('h3', { text: 'Runtime' });
+
+    const status = this.runtimeStatus;
+    const summary = status
+      ? (status.available ? 'Ready' : 'Needs setup')
+      : (this.runtimeStatusLoading ? 'Checking...' : 'Not checked');
+
+    const runtimeHeaderSetting = new Setting(container)
+      .setName('Terminal runtime')
+      .setDesc(`${summary}. Python backend used to start terminal sessions.${this.runtimeLastChecked ? ` Last checked: ${this.runtimeLastChecked}.` : ''}`)
+      .addButton((b) =>
+        b
+          .setButtonText('Check again')
+          .onClick(() => {
+            this.refreshRuntimeStatus();
+          }),
+      );
+    if (status && !status.available) {
+      runtimeHeaderSetting.settingEl.addClass('vault-terminal-runtime-status-error');
+    }
+
+    const runtimeConfig = this.configManager.get().runtime ?? {};
+    const pythonPathDesc = [
+      'Optional explicit Python executable path. Leave empty to auto-detect from the current environment.',
+      status?.pythonPath ? `Current: ${status.pythonPath}` : undefined,
+    ].filter((line): line is string => Boolean(line)).join(' ');
+    const pythonPathSetting = new Setting(container)
+      .setName('Python path')
+      .setDesc(pythonPathDesc)
+      .addText((text) =>
+        text
+          .setPlaceholder(process.platform === 'win32' ? 'python.exe or C:\\Path\\to\\python.exe' : 'python3 or /usr/bin/python3')
+          .setValue(runtimeConfig.pythonPath ?? '')
+          .onChange(async (value) => {
+            this.configManager.update({
+              runtime: {
+                ...this.configManager.get().runtime,
+                pythonPath: value.trim() || undefined,
+              },
+            });
+            await this.configManager.save();
+          }),
+      );
+    pythonPathSetting.settingEl.addClass('vault-terminal-runtime-python-path');
+
+    if (!status) {
+      container.createEl('p', {
+        text: this.runtimeStatusLoading ? 'Checking runtime status...' : 'Click Check again to inspect the runtime.',
+        cls: 'vault-terminal-settings-empty',
+      });
+      if (!this.runtimeStatusLoading) {
+        this.refreshRuntimeStatus();
+      }
+      return;
+    }
+
+    this.renderRuntimeStatusRows(container, status);
+
+    const setupGuideSetting = this.renderExternalLink(container, 'Runtime setup guide', RUNTIME_SETUP_URL);
+    if (!status.available) {
+      setupGuideSetting.settingEl.addClass('vault-terminal-runtime-status-error');
+    }
+  }
+
+  private renderRuntimeStatusRows(container: HTMLElement, status: RuntimeStatus): void {
+    const rows: Array<[string, string]> = [
+      ['Platform', `${status.platform}-${status.arch}`],
+      ['Backend', status.backend],
+      ['Python version', status.pythonVersion ?? '(not found)'],
+      ['Message', status.message],
+    ];
+
+    for (const [name, value] of rows) {
+      new Setting(container).setName(name).setDesc(value);
+    }
+  }
+
+  private async refreshRuntimeStatus(): Promise<void> {
+    this.runtimeStatusLoading = true;
+    this.display();
+    try {
+      this.runtimeStatus = await checkRuntimeStatus(this.vaultTerminalPlugin.getPluginDirectory(), {
+        pythonPath: this.configManager.get().runtime?.pythonPath,
+      });
+      this.runtimeLastChecked = new Date().toLocaleTimeString();
+    } catch (error) {
+      console.error('Failed to check Vault Terminal runtime', error);
+      this.runtimeStatus = {
+        platform: process.platform,
+        arch: process.arch,
+        backend: process.platform === 'win32' ? 'winpty' : 'posix-pty',
+        pythonPath: null,
+        pythonVersion: null,
+        available: false,
+        message: 'Runtime check failed. See README.md and developer console.',
+      };
+    } finally {
+      this.runtimeStatusLoading = false;
+      this.display();
+    }
+  }
+
+  private renderAboutTab(container: HTMLElement): void {
+    container.createEl('h3', { text: 'About' });
+
+    new Setting(container)
+      .setName('Vault Terminal')
+      .setDesc('Embedded terminal for Obsidian with vault-aware actions and links.');
+
+    new Setting(container)
+      .setName('Version')
+      .setDesc(this.vaultTerminalPlugin.manifest.version);
+
+    new Setting(container)
+      .setName('Author')
+      .setDesc(AUTHOR_NAME);
+
+    this.renderExternalLink(container, 'GitHub repository', REPOSITORY_URL);
+
+    new Setting(container)
+      .setName('License')
+      .setDesc('MIT');
+  }
+
+  private renderExternalLink(container: HTMLElement, name: string, url: string): Setting {
+    return new Setting(container)
+      .setName(name)
+      .setDesc(url)
+      .addButton((button) =>
+        button
+          .setButtonText('Open')
+          .onClick(() => openExternalUrl(url)),
+      );
   }
 }

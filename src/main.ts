@@ -1,4 +1,4 @@
-import { FileSystemAdapter, Plugin, WorkspaceLeaf } from 'obsidian';
+import { FileSystemAdapter, Platform, Plugin, WorkspaceLeaf } from 'obsidian';
 import * as path from 'path';
 import { ActionRegistry } from './actions/actionRegistry';
 import { ConfigManager } from './config/configManager';
@@ -21,6 +21,7 @@ interface TabGroupWorkspace {
 export default class VaultTerminalPlugin extends Plugin {
   private configManager!: ConfigManager;
   private actionRegistry!: ActionRegistry;
+  private settingTab!: VaultTerminalSettingTab;
   private terminalLeafHistory: string[] = [];
   private static readonly DEFAULT_OPEN_BEHAVIOR = {
     location: 'split-down',
@@ -28,6 +29,11 @@ export default class VaultTerminalPlugin extends Plugin {
   } as const;
 
   async onload(): Promise<void> {
+    if (Platform.isMobileApp) {
+      console.warn('Vault Terminal is desktop-only and will not load on mobile.');
+      return;
+    }
+
     const pluginDir = this.getPluginDir();
     registerCustomIcons();
 
@@ -38,7 +44,7 @@ export default class VaultTerminalPlugin extends Plugin {
     this.registerView(
       TERMINAL_VIEW_TYPE,
       (leaf) =>
-        new TerminalView(leaf, pluginDir, this.configManager, this.actionRegistry),
+        new TerminalView(leaf, pluginDir, this.configManager, this.actionRegistry, () => this.openRuntimeSettings()),
     );
 
     this.addRibbonIcon('square-terminal', 'Vault Terminal', () => this.activateView());
@@ -49,7 +55,8 @@ export default class VaultTerminalPlugin extends Plugin {
       callback: () => this.activateView(),
     });
 
-    this.addSettingTab(new VaultTerminalSettingTab(this.app, this, this.configManager));
+    this.settingTab = new VaultTerminalSettingTab(this.app, this, this.configManager);
+    this.addSettingTab(this.settingTab);
 
     this.actionRegistry.registerCommands(
       (id, name, callback) => this.addCommand({ id, name, callback }),
@@ -65,6 +72,16 @@ export default class VaultTerminalPlugin extends Plugin {
   private getActiveView(): TerminalView | null {
     const leaves = this.app.workspace.getLeavesOfType(TERMINAL_VIEW_TYPE);
     return leaves.length > 0 ? (leaves[0].view as TerminalView) : null;
+  }
+
+  getPluginDirectory(): string {
+    return this.getPluginDir();
+  }
+
+  openRuntimeSettings(): void {
+    (this.app as unknown as { setting?: { open(): void; openTabById(id: string): void } }).setting?.open();
+    (this.app as unknown as { setting?: { open(): void; openTabById(id: string): void } }).setting?.openTabById(this.manifest.id);
+    this.settingTab.openRuntimeTab();
   }
 
   private async activateView(): Promise<void> {

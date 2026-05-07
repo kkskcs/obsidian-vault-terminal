@@ -76,6 +76,10 @@ export interface OpenBehaviorConfig {
   pinned: boolean;
 }
 
+export interface RuntimeConfig {
+  pythonPath?: string;
+}
+
 export type LocaleSetting = 'system' | 'app' | string;
 
 export interface EnvVarConfig {
@@ -208,6 +212,7 @@ export interface VaultTerminalConfig {
   vaultRoot?: boolean;
   scriptFolder?: string;
   locale?: LocaleSetting;
+  runtime?: RuntimeConfig;
   terminalOptions?: Record<string, unknown>;
   profiles?: Record<string, Profile>;
   defaultProfile?: string;

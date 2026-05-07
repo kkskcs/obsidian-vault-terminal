@@ -159,6 +159,30 @@
   margin: 4px 0 12px;
 }
 
+.vault-terminal-runtime-status-error {
+  background-color: rgba(var(--color-red-rgb), 0.08);
+  border-radius: 6px;
+  border-left: 3px solid var(--color-red);
+  padding-left: 12px;
+}
+
+.vault-terminal-runtime-status-error .setting-item-name {
+  color: var(--color-red);
+  font-weight: 600;
+}
+
+.vault-terminal-runtime-status-error .setting-item-description {
+  color: var(--color-red);
+}
+
+.vault-terminal-runtime-python-path .setting-item-control {
+  flex: 1 1 360px;
+}
+
+.vault-terminal-runtime-python-path input[type='text'] {
+  width: min(100%, 520px);
+}
+
 .vault-terminal-settings-desc {
   color: var(--text-muted);
   font-size: var(--font-ui-small);

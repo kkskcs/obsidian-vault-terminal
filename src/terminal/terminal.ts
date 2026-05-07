@@ -6,6 +6,7 @@ import { Terminal } from '@xterm/xterm';
 import { ItemView, Scope, WorkspaceLeaf, getLanguage } from 'obsidian';
 import { ActionRegistry } from '../actions/actionRegistry';
 import { ConfigManager, flattenEnvVars } from '../config/configManager';
+import { RuntimeRequiredDialog } from '../ui/dialog';
 import { ActionButton, SystemButtonCallbacks, Toolbar } from '../ui/toolbar';
 import { registerLinkProvider } from './links';
 import { PtyManager } from './pty';
@@ -40,6 +41,7 @@ export class TerminalView extends ItemView {
     private readonly pluginDir: string,
     configManager: ConfigManager,
     actionRegistry: ActionRegistry,
+    private readonly openRuntimeSettings: () => void,
   ) {
     super(leaf);
     this.ptyManager = new PtyManager();
@@ -174,15 +176,23 @@ export class TerminalView extends ItemView {
 
     const vaultRoot = this.configManager.getVaultRoot();
     const config = this.configManager.get();
-    const pty = await this.ptyManager.spawn({
-      vaultRoot,
-      pluginDir: this.pluginDir,
-      env: flattenEnvVars(config.env),
-      locale: config.locale,
-      appLocale: getLanguage(),
-      cols: this.terminal.cols,
-      rows: this.terminal.rows,
-    });
+    let pty;
+    try {
+      pty = await this.ptyManager.spawn({
+        vaultRoot,
+        pluginDir: this.pluginDir,
+        env: flattenEnvVars(config.env),
+        locale: config.locale,
+        appLocale: getLanguage(),
+        pythonPath: config.runtime?.pythonPath,
+        cols: this.terminal.cols,
+        rows: this.terminal.rows,
+      });
+    } catch (error) {
+      console.error('Failed to start Vault Terminal PTY', error);
+      this.showRuntimeRequiredDialog();
+      return;
+    }
 
     pty.onData((data) => this.terminal?.write(data));
     pty.onExit(() => this.leaf.detach());
@@ -264,6 +274,10 @@ export class TerminalView extends ItemView {
   handlePassthrough(action: string): void {
     if (action === 'addTerminalOutputToNote') this.addTerminalOutputToNote();
     else if (action === 'sendSelectedTextToTerminal') this.sendNoteToTerminal();
+  }
+
+  private showRuntimeRequiredDialog(): void {
+    new RuntimeRequiredDialog(this.app, this.openRuntimeSettings).open();
   }
 
   private resolvedFontSize(): number {
