@@ -107,7 +107,7 @@ export default class VaultTerminalPlugin extends Plugin {
       return this.createLeafInTabGroup(lastTerminalLeaf.parent);
     }
 
-    const activeLeaf = this.app.workspace.activeLeaf ?? this.app.workspace.getMostRecentLeaf();
+    const activeLeaf = this.getMostRecentRootLeaf();
     if (!activeLeaf) {
       return this.app.workspace.getLeaf('tab');
     }
@@ -130,6 +130,10 @@ export default class VaultTerminalPlugin extends Plugin {
     }
 
     return this.app.workspace.createLeafBySplit(activeLeaf, 'horizontal', false);
+  }
+
+  private getMostRecentRootLeaf(): WorkspaceLeaf | null {
+    return this.app.workspace.getMostRecentLeaf(this.app.workspace.rootSplit);
   }
 
   private getLastTerminalLeaf(): WorkspaceLeaf | null {
