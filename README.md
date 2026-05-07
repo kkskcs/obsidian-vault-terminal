@@ -6,7 +6,7 @@ It is a learning-oriented plugin project developed with AI-assisted coding workf
 
 ## Features
 
-- **Embedded terminal** — full PTY shell (zsh, bash, fish, PowerShell) inside Obsidian
+- **Embedded terminal** — full PTY shell (zsh, bash, fish) inside Obsidian on macOS/Linux
 - **Wikilink detection** — `[[links]]` in terminal output become clickable, opening the note directly
 - **File drag & drop** — drag files from the OS or Obsidian's file explorer into the terminal to insert the path
 - **Action buttons** — configurable toolbar buttons that send templated commands or run scripts with parameters
@@ -16,7 +16,7 @@ It is a learning-oriented plugin project developed with AI-assisted coding workf
 
 > Not yet available on the Obsidian Community Plugin marketplace.
 
-1. Download `main.js`, `manifest.json`, and `styles.css` from the latest release
+1. Download `main.js`, `manifest.json`, `styles.css`, and `python/` from the latest release
 2. Copy them to `<vault>/.obsidian/plugins/vault-terminal/`
 3. Enable the plugin in Obsidian → Settings → Community plugins
 

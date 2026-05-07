@@ -15,7 +15,8 @@
   "files": [
     "main.js",
     "styles.css",
-    "manifest.json"
+    "manifest.json",
+    "python"
   ],
   "dependencies": {
     "@xterm/addon-fit": "^0.10.0",
@@ -24,8 +25,7 @@
     "@xterm/addon-web-links": "^0.11.0",
     "@xterm/addon-webgl": "^0.19.0",
     "@xterm/xterm": "^5.0.0",
-    "ansi_up": "^6.0.2",
-    "node-pty": "^1.0.0"
+    "ansi_up": "^6.0.2"
   },
   "devDependencies": {
     "@types/node": "^16.0.0",
