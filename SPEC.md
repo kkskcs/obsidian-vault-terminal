@@ -22,9 +22,11 @@
 
 #### 2.1.1 렌더링
 - **엔진**: xterm.js (MIT 라이선스)
-- **쉘 연결**: node-pty (PTY 프로세스)
-- **위치**: 옵시디언 사이드 패널 또는 탭
-- **stdin/stdout**: xterm.js ↔ node-pty 양방향 연결
+- **쉘 연결**: Python helper 기반 PTY 브릿지
+  - macOS/Linux: Python 표준 `pty` 모듈
+  - Windows: Python + `pywinpty`
+- **위치**: 옵시디언 중앙 노트 영역의 탭/분할
+- **stdin/stdout**: xterm.js ↔ TypeScript PTY wrapper ↔ Python helper ↔ OS PTY
 - **상단 고정 바**: 액션 버튼 툴바 (터미널 위쪽)
 
 #### 2.1.2 쉘 자동 감지 (Shell Auto-detection)
@@ -77,108 +79,99 @@
 | 📤 | Terminal → Note | 최근 터미널 출력을 현재 노트에 추가 |
 
 **사용자 정의 버튼 (오른쪽, 가로 스크롤)**
-- 설정 데이터의 `toolbar` 배열 순서대로 렌더링
+- 설정 데이터의 툴바 구성 순서대로 렌더링
+- 툴바는 action 버튼, divider, spacer를 순서대로 배치
 - 버튼 수가 많을 경우 가로 스크롤
 - 모든 버튼 아이콘 기반, 라벨은 hover 툴팁으로 표시
 - 아이콘: Obsidian 내장 lucide 아이콘 사용 (`setIcon()` API)
 
 #### 2.2.2 버튼 동작 흐름
 1. 사용자 버튼 클릭
-2. 해당 액션의 파라미터 검사
-3. **파라미터 있음** → 다이얼로그 순차 출력
-    - 각 파라미터 필드 표시 (placeholder 포함)
-    - 모든 입력 완료 → OK 클릭
-4. **파라미터 없음** → 즉시 실행
-5. 템플릿/스크립트 실행
-6. 결과를 PTY stdin으로 터미널에 전송
+2. 해당 action의 `params`를 순서대로 resolve
+3. `prompt` 입력이 필요한 경우 다이얼로그 표시
+4. resolve된 값을 action `template`의 `{key}` 위치에 단순 문자열 치환
+5. 최종 plain text를 PTY stdin으로 터미널에 전송
 
 #### 2.2.3 다이얼로그 시스템
 - **다이얼로그 타입**: 옵시디언 Modal (기본 UI)
-- **필드 렌더링**: 파라미터 개수만큼 입력 필드
+- **필드 렌더링**: `type: "prompt"` 파라미터 개수만큼 입력 필드
 - **각 필드**:
-    - 라벨: 파라미터 name
+    - 라벨: 파라미터 key
     - 입력창: 텍스트 입력
     - Placeholder: 가이드 텍스트
     - 버튼: [Cancel] [OK]
 
-#### 2.2.4 파라미터 특별 옵션
-```json
-{
-  "name": "query",
-  "placeholder": "검색 쿼리",
-  "useSelectedText": false,
-  "useCurrentContext": false,
-  "required": true
-}
-```
-
 ---
 
-### 2.3 명령 실행 방식
+### 2.3 Snippet & Action 실행 모델
 
-#### 2.3.1 방식 A: 템플릿 치환 (Template Mode)
+#### 2.3.1 핵심 개념
+- **Snippet**: 재사용 가능한 텍스트 템플릿
+- **Action**: snippet / 파일 / 현재 노트 / 선택 텍스트 / prompt / 고정 텍스트를 조합해 최종 텍스트를 만드는 실행 단위
+- **Toolbar**: action 버튼을 단순 나열하는 UI
+- **플러그인 책임**: 입력 resolve, 문자열 치환, 터미널 stdin 전달
+- **템플릿 책임**: 쉘 문법, quote, heredoc, AI CLI prompt 설계, 실행 로직은 action template에 명시
 
-**정의:**
+#### 2.3.2 Snippet 정의
 ```json
 {
-  "id": "find-md",
-  "label": "Find Markdown",
-  "mode": "template",
-  "command": "find . -name {pattern}",
-  "params": [{ "name": "pattern", "placeholder": "예: *.md, test*" }]
+  "id": "wikilink-rule",
+  "label": "Wikilink Rule",
+  "description": "Ask AI tools to use Obsidian wikilinks.",
+  "template": "파일 참조 시 Obsidian wikilink 형식으로 출력해 주세요."
 }
 ```
 
-**동작:**
-1. 사용자 입력: `*.md`
-2. 템플릿 치환: `find . -name *.md`
-3. PTY stdin으로 터미널 전송
-4. 터미널에서 실행
+- 기본 스니펫: 플러그인 내장, 수정 불가
+- 커스텀 스니펫: `data.json`에 저장, 설정 UI에서 편집
+- 스니펫은 action param의 `type: "snippet"`으로 참조
 
-**지원 구문:**
-- `{paramName}` → 파라미터 값으로 치환
-- 문자열은 그대로 전송 (쉘 해석)
-
-#### 2.3.2 방식 B: 쉘 스크립트 (Script Mode)
-
-**정의:**
+#### 2.3.3 Action 정의
 ```json
 {
-  "id": "advanced-search",
-  "label": "Advanced Search",
-  "mode": "script",
-  "script": "search.sh",
-  "params": [{ "name": "query", "useSelectedText": true }]
+  "id": "claude-review",
+  "label": "Claude Review",
+  "icon": "bot",
+  "variant": "claude",
+  "template": "{rule}\n\nFile: {filePath}\n\n```\n{content}\n```\n\nRequest:\n{request}",
+  "params": [
+    { "key": "rule", "type": "snippet", "id": "wikilink-rule" },
+    { "key": "filePath", "type": "currentFilePath" },
+    { "key": "content", "type": "currentFileContent" },
+    { "key": "request", "type": "prompt", "placeholder": "리뷰 요청 입력" }
+  ],
+  "echo": false
 }
 ```
 
-**동작:**
-1. 스크립트 폴더 스캔: `.vault-terminal/scripts/search.sh`
-2. 스크립트 실행: `./search.sh {query값}`
-3. 표준출력을 PTY stdin으로 터미널 전송
+- `template`의 `{key}`는 같은 key를 가진 param resolve 결과로 단순 치환
+- CLI 실행이 필요하면 action `template`에 쉘 명령으로 작성
+- 최종 결과는 plain text이며 현재 터미널 stdin으로 전달
 
-**스크립트 작성:**
-- 사용자가 직접 Vault 내 스크립트 폴더에 작성
-- 플러그인은 스캔/실행만 담당
-- 수정은 사용자가 텍스트 에디터에서 직접 (플러그인 X)
-
-#### 2.3.3 방식 C: Obsidian URI (URI Mode)
-
-**정의:**
-```json
-{
-  "id": "open-file",
-  "label": "Open File",
-  "mode": "uri",
-  "command": "obsidian://open?file={filepath}",
-  "params": [{ "name": "filepath", "placeholder": "경로/파일명.md" }]
-}
+#### 2.3.4 Param 입력 타입
+```typescript
+type ActionParam =
+  | { key: string; type: 'snippet'; id: string }
+  | { key: string; type: 'filePath'; path: string }
+  | { key: string; type: 'fileContent'; path: string }
+  | { key: string; type: 'currentFilePath' }
+  | { key: string; type: 'currentFileContent' }
+  | { key: string; type: 'selectedText' }
+  | { key: string; type: 'text'; content: string }
+  | { key: string; type: 'prompt'; placeholder?: string };
 ```
 
-**동작:**
-1. 파라미터 입력: `inbox/note.md`
-2. URI 생성: `obsidian://open?file=inbox/note.md`
-3. 옵시디언 URI 스킴 호출 (옵시디언 자체 처리)
+#### 2.3.5 Action Group
+- 그룹은 action을 분류하기 위한 상위 구조
+- 같은 action을 여러 그룹에 포함할 수 있음
+
+```json
+{
+  "id": "claude",
+  "label": "Claude",
+  "actionIds": ["claude-review"]
+}
+```
 
 ---
 
@@ -231,22 +224,24 @@ AI 도구(Claude Code, Aider 등)에 wikilink 포맷 출력을 지시하는 템�
 
 #### 2.5.1 현재 노트 컨텍스트 (Current Context)
 
-**버튼 정의:**
+**Action 예시:**
 ```json
 {
-  "id": "current-context",
-  "label": "Current Context",
-  "mode": "context",
-  "contextType": "currentFile",
-  "command": "@search-related {currentFile}"
+  "id": "send-current-file",
+  "label": "Send Current File",
+  "template": "File: {filePath}\n\n{content}",
+  "params": [
+    { "key": "filePath", "type": "currentFilePath" },
+    { "key": "content", "type": "currentFileContent" }
+  ]
 }
 ```
 
 **동작:**
 1. 플러그인이 현재 열려있는 노트 감지
-2. 파일 경로 자동 획득 (app.workspace.getActiveFile())
-3. 다이얼로그 스킵
-4. 즉시 명령 실행: `@search-related inbox/note.md`
+2. 파일 경로 또는 파일 내용 자동 획득
+3. action template의 `{filePath}`, `{content}`에 주입
+4. 최종 텍스트를 터미널 stdin으로 전달
 
 **사용 케이스:**
 - 지금 보고 있는 노트의 관련 문서 검색
@@ -257,15 +252,15 @@ AI 도구(Claude Code, Aider 등)에 wikilink 포맷 출력을 지시하는 템�
 
 **파라미터 옵션:**
 ```json
-{ "name": "query", "useSelectedText": true }
+{ "key": "query", "type": "selectedText" }
 ```
 
 **동작:**
 1. 옵시디언에서 텍스트 선택
 2. 버튼 클릭
 3. 선택 텍스트 자동 획득 (editor.getSelectedText())
-4. 다이얼로그 스킵
-5. 명령 실행: 선택 텍스트를 파라미터로 사용
+4. action template의 `{query}`에 주입
+5. 최종 텍스트를 터미널 stdin으로 전달
 
 **사용 케이스:**
 - 선택한 단어를 검색 쿼리로 사용
@@ -481,17 +476,46 @@ Obsidian 설정 탭에서 플러그인 전체 설정을 GUI로 관리. `data.jso
 - **히스토리**: 저장 모드 선택 (none / note / daily), 폴더 경로, 최대 보관 수
 
 #### Toolbar 탭
-- **템플릿 관리**
-  - 템플릿 목록 (id, label, mode)
-  - 추가 / 수정 / 삭제
-  - 편집 시: label, mode, command/script, `{placeholder}` 구성 (이름 / placeholder 텍스트 / required 여부)
-- **액션 관리**
-  - 액션 목록
-  - 추가 / 수정 / 삭제
-  - 편집 시: 기반 템플릿 선택, 파라미터 입력 프롬프트 설정, 아이콘 선택
 - **툴바 구성**
-  - 등록된 액션 목록에서 드래그 앤 드롭으로 순서 조정
-  - 활성화 / 비활성화 토글
+  - 사용자 정의 도구 버튼의 배치 편집
+  - action / divider / spacer 형태를 지원
+  - 런타임 렌더링은 등록된 action 버튼 목록을 기반으로 표시
+  - 툴바 자체에는 그룹 기능을 두지 않고 단순 버튼 나열을 유지
+- **액션 스타일**
+  - `variant`로 버튼별 색상/외곽선 스타일 지정
+  - 기본 쉘: `default`
+  - Claude: `claude`
+  - Codex: `codex`
+  - Gemini: `gemini`
+- **액션 관리**
+  - 실행 가능한 버튼 단위
+  - 편집 시: label, icon, variant, template, params, echo
+
+#### Snippets 탭
+- **스니펫 모델**
+  - 재사용 가능한 텍스트 템플릿
+  - 기본 스니펫은 플러그인 내장, 수정 불가
+  - 커스텀 스니펫은 `data.json`에 저장하고 UI에서 편집
+- **UI**
+  - group별 expandable section
+  - 빈 그룹은 "No snippets in this group." 안내만 표시
+- **Action 연계**
+  - action param의 `type: "snippet"`으로 스니펫을 참조
+  - snippet 자체는 실행 단위가 아니며, action이 실행 단위
+
+#### Runtime 탭
+- **역할**
+  - Python PTY backend 상태 진단
+  - Python executable path 수동 입력
+  - OS별 설치 가이드 링크 제공
+- **Python 탐색 우선순위**
+  1. Runtime 탭의 Python path
+  2. `VAULT_TERMINAL_PYTHON`
+  3. Windows: `py`
+  4. macOS/Linux: `python3`
+- **실패 UX**
+  - 터미널 실행 실패 시 RuntimeRequiredDialog 표시
+  - Runtime 설정 탭으로 이동하거나 README runtime setup guide를 열 수 있음
 
 ---
 
@@ -509,6 +533,9 @@ Obsidian 설정 탭에서 플러그인 전체 설정을 GUI로 관리. `data.jso
   "version": "1.0.0",
   "vaultRoot": true,
   "scriptFolder": ".vault-terminal/scripts",
+  "runtime": {
+    "pythonPath": "/usr/bin/python3"
+  },
   "terminalOptions": {
     "fontSize": 14,
     "lineHeight": 1.2,
@@ -542,62 +569,49 @@ Obsidian 설정 탭에서 플러그인 전체 설정을 GUI로 관리. `data.jso
     "folder": ".vault-terminal/history",
     "maxEntries": 1000
   },
+  "snippets": [
+    {
+      "id": "wikilink-rule",
+      "label": "Wikilink Rule",
+      "description": "Ask AI tools to use Obsidian wikilinks.",
+      "template": "파일 참조 시 Obsidian wikilink 형식으로 출력해 주세요."
+    }
+  ],
   "actions": [
+    {
+      "id": "claude-review",
+      "label": "Claude Review",
+      "icon": "bot",
+      "variant": "claude",
+      "template": "{rule}\n\nFile: {filePath}\n\n```\n{content}\n```\n\nRequest:\n{request}",
+      "params": [
+        { "key": "rule", "type": "snippet", "id": "wikilink-rule" },
+        { "key": "filePath", "type": "currentFilePath" },
+        { "key": "content", "type": "currentFileContent" },
+        { "key": "request", "type": "prompt", "placeholder": "리뷰 요청 입력" }
+      ],
+      "echo": false
+    },
     {
       "id": "find-files",
       "label": "Find Files",
       "icon": "search",
-      "mode": "template",
-      "command": "find . -name {pattern}",
-      "params": [{ "name": "pattern", "placeholder": "정규식 패턴 (예: *.md)" }]
-    },
-    {
-      "id": "search-grep",
-      "label": "Grep Search",
-      "icon": "search",
-      "mode": "script",
-      "script": "grep-search.sh",
+      "variant": "default",
+      "template": "find . -name {pattern}\n",
       "params": [
-        { "name": "query", "placeholder": "검색 단어" },
-        { "name": "extension", "placeholder": "파일 확장자 (예: md)" }
-      ]
-    },
-    {
-      "id": "current-context",
-      "label": "Current Context",
-      "icon": "file",
-      "mode": "context",
-      "contextType": "currentFile",
-      "command": "@echo {currentFile}"
-    },
-    {
-      "id": "open-file",
-      "label": "Open in Obsidian",
-      "icon": "external-link",
-      "mode": "uri",
-      "command": "obsidian://open?file={filepath}",
-      "params": [{ "name": "filepath", "placeholder": "경로/파일명.md" }]
-    },
-    {
-      "id": "add-to-note",
-      "label": "Add to Note",
-      "icon": "plus",
-      "mode": "passthrough",
-      "action": "addTerminalOutputToNote"
-    },
-    {
-      "id": "send-text",
-      "label": "Send to Terminal",
-      "icon": "send",
-      "mode": "passthrough",
-      "action": "sendSelectedTextToTerminal",
-      "params": [{ "name": "text", "useSelectedText": true }]
+        { "key": "pattern", "type": "prompt", "placeholder": "예: *.md" }
+      ],
+      "echo": true
     }
   ],
-  "toolbar": ["find-files", "search-grep", "current-context", "open-file", "add-to-note", "send-text"],
-  "ruleSets": [
-    { "id": "claude-setup", "label": "Claude Workflow", "actions": ["current-context", "search-grep", "add-to-note"] }
+  "actionGroups": [
+    { "id": "ai", "label": "AI", "actionIds": ["claude-review"] },
+    { "id": "shell", "label": "Shell", "actionIds": ["find-files"] }
   ],
+  "toolbar": [
+    "claude-review",
+    "find-files"
+  ]
 }
 ```
 
@@ -606,79 +620,118 @@ Obsidian 설정 탭에서 플러그인 전체 설정을 GUI로 관리. `data.jso
 | 항목 | 타입 | 기본값 | 설명 |
 |------|------|--------|------|
 | `vaultRoot` | bool | true | Vault를 경로 루트로 설정 |
-| `scriptFolder` | string | `.vault-terminal/scripts` | 스크립트 폴더 상대경로 |
+| `scriptFolder` | string | `.vault-terminal/scripts` | 사용자 스크립트 폴더 |
+| `runtime` | object | `{}` | Python PTY runtime 설정 |
 | `terminalOptions` | object | {...} | xterm.js 옵션 |
 | `profiles` | object | {...} | 프로필별 테마 정의 |
 | `defaultProfile` | string | `default` | 기본 프로필명 |
 | `env` | object | {} | 사용자 정의 환경변수 |
 | `addToNote` | object | `{lines:200, askLines:true}` | Add to Note 동작 설정 |
 | `history` | object | `{mode:"none"}` | 터미널 입력 히스토리 저장 설정 |
+| `snippets` | array | [] | 재사용 가능한 텍스트 템플릿 |
 | `actions` | array | [...] | 액션 정의 배열 |
-| `toolbar` | array | [...] | 표시할 버튼 목록 (ID) |
-| `ruleSets` | array | [...] | 액션 조합 정의 |
+| `actionGroups` | array | [] | 설정 UI 분류용 액션 그룹 |
+| `toolbar` | array | [...] | 표시할 액션 버튼 목록 (ID) |
 
 ---
 
-## 4. 액션 정의 상세
+## 4. Snippet & Action 정의 상세
 
-### 4.1 공통 필드
+### 4.1 Snippet 필드
 ```json
 {
-  "id": "unique-id",
+  "id": "unique-snippet-id",
+  "label": "Snippet Label",
+  "description": "스니펫 설명",
+  "template": "재사용할 텍스트 템플릿"
+}
+```
+
+### 4.2 Action 필드
+```json
+{
+  "id": "unique-action-id",
   "label": "Button Label",
   "icon": "icon-name",
-  "mode": "template|script|uri|context|passthrough",
-  "description": "액션 설명"
+  "variant": "default|claude|codex|gemini",
+  "template": "{rule}\n\n{request}",
+  "params": [],
+  "echo": false
 }
 ```
 
-### 4.2 Mode별 필드
+- `template`: 최종 stdin으로 전달할 텍스트 템플릿
+- `params`: `{key}` 치환에 사용할 입력 정의 배열
+- `variant`: 툴바 버튼의 개별 스타일
+- `echo`: 최종 텍스트를 사용자가 타이핑/붙여넣은 것처럼 터미널 화면에 표시할지 여부
+  - `true`: 짧은 쉘 명령처럼 화면에 입력 내용을 보여주며 전달
+  - `false`: PTY stdin으로 직접 전달해 긴 프롬프트/파일 내용 주입 과정을 숨김
 
-#### Template Mode
+### 4.3 Action Group 필드
 ```json
-{ "mode": "template", "command": "find . -name {pattern}", "params": [...] }
+{
+  "id": "ai",
+  "label": "AI",
+  "actionIds": ["claude-review", "codex-fix"]
+}
 ```
 
-#### Script Mode
-```json
-{ "mode": "script", "script": "search.sh", "workingDir": "<vault root>", "params": [...] }
-```
+- 그룹은 설정 UI 분류용이며 툴바 배치에는 직접 관여하지 않음
 
-#### URI Mode
-```json
-{ "mode": "uri", "command": "obsidian://open?file={filepath}", "params": [...] }
-```
-
-#### Context Mode
-```json
-{ "mode": "context", "contextType": "currentFile|currentTag|vaultPath", "command": "@action {context}" }
-```
-
-#### Passthrough Mode
-```json
-{ "mode": "passthrough", "action": "addTerminalOutputToNote|sendSelectedTextToTerminal", "params": [...] }
-```
-
-### 4.3 파라미터 정의
+### 4.4 파라미터 정의
 
 ```json
 {
-  "name": "param-id",
-  "placeholder": "입력 가이드",
-  "type": "text|number|choice",
-  "required": true,
-  "useSelectedText": false,
-  "useCurrentContext": false,
-  "default": "기본값",
-  "choices": ["option1", "option2"]
+  "key": "request",
+  "type": "prompt",
+  "placeholder": "요청 입력"
 }
+```
+
+지원 타입:
+- `snippet`: 다른 snippet의 template을 resolve
+- `filePath`: 지정한 Vault 상대 파일 경로
+- `fileContent`: 지정한 Vault 상대 파일 내용
+- `currentFilePath`: 현재 활성 노트 경로
+- `currentFileContent`: 현재 활성 노트 내용
+- `selectedText`: 현재 선택 텍스트
+- `text`: 고정 텍스트
+- `prompt`: 실행 시 사용자에게 입력받는 텍스트
+
+### 4.5 실행 규칙
+1. `params`를 배열 순서대로 resolve
+2. `template`의 `{key}`를 resolve 결과로 단순 문자열 치환
+3. 치환되지 않은 `{key}`는 빈 문자열로 처리
+4. 최종 텍스트를 현재 터미널 stdin으로 전달
+5. shell quote, heredoc, CLI command 실행 방식은 action template에 작성
+
+### 4.6 Shell template 예시
+
+CLI 실행 방식은 action `template`에 직접 작성한다.
+
+```text
+claude <<'EOF'
+{rule}
+
+File: {filePath}
+
+{request}
+EOF
+```
+
+파일 경로만 넘기거나 shell redirection/pipe를 사용하는 것도 action template으로 표현한다.
+
+```text
+cat "{rulePath}" "{contextPath}" | codex
 ```
 
 ---
 
-## 5. 스크립트 시스템
+## 5. 스크립트 사용 가이드
 
-### 5.1 스크립트 폴더 구조
+스크립트 실행은 action `template` 안에 일반 쉘 명령으로 작성한다.
+
+### 5.1 스크립트 폴더 예시
 ```
 Vault/
 ├─ .vault-terminal/
@@ -715,12 +768,12 @@ echo "Backup created: $backup_dir"
 ### 5.3 스크립트 → 플러그인 통신
 
 **입력:**
-- 커맨드라인 인자로 파라미터 전달
-- 예: `./search.sh "query-value" "md"`
+- action template에서 사용자가 직접 명령과 인자를 구성
+- 예: `.vault-terminal/scripts/search.sh "{query}" "md"`
 
 **출력:**
-- 표준출력 (stdout) → 터미널에 출력
-- 표준에러 (stderr) → 터미널 에러로 표시
+- 스크립트는 터미널에서 일반 명령으로 실행됨
+- 표준출력/표준에러 처리는 쉘과 터미널이 그대로 담당
 
 ---
 
@@ -784,24 +837,35 @@ obsidian-vault-terminal/
 │   ├── main.ts                 # 플러그인 진입점
 │   ├── ui/
 │   │   ├── toolbar.ts          # 액션 버튼 툴바
-│   │   └── dialog.ts           # 파라미터 입력 다이얼로그
+│   │   ├── settingsTab.ts      # 설정 UI
+│   │   ├── modals.ts           # 설정 편집 모달
+│   │   ├── dialog.ts           # 파라미터/런타임 다이얼로그
+│   │   ├── iconRegistry.ts     # 설정/툴바 아이콘 정의
+│   │   └── links.ts            # 외부 링크 상수
 │   ├── terminal/
-│   │   ├── terminal.ts         # xterm.js 래퍼 + node-pty 연결
-│   │   ├── pty.ts              # node-pty PTY 프로세스 관리
+│   │   ├── terminal.ts         # xterm.js 래퍼 + PTY 연결
+│   │   ├── pty.ts              # Python helper PTY 프로세스 관리
+│   │   ├── pythonRuntime.ts    # Python/pywinpty runtime 상태 확인
 │   │   ├── links.ts            # 링크 감지/렌더링
-│   │   └── executor.ts         # 명령 실행 (script/template용)
 │   ├── actions/
 │   │   ├── actionRegistry.ts   # 액션 등록/관리
 │   │   ├── templateEngine.ts   # 템플릿 치환
-│   │   └── scriptRunner.ts     # 스크립트 실행
+│   │   └── scriptRunner.ts     # 사용자 스크립트 실행 보조
 │   ├── config/
 │   │   └── configManager.ts    # 설정 로드/저장
 │   └── utils/
-│       ├── pathUtils.ts        # 경로 정규화
-│       └── obsidianUtils.ts    # Obsidian API 래퍼
+│       └── fonts.ts            # 시스템 폰트 조회
+├── python/
+│   ├── pty_helper.py           # JS와 OS PTY 사이 JSON-line 브릿지
+│   └── backends/
+│       ├── posix_backend.py    # macOS/Linux Python 표준 pty
+│       └── winpty_backend.py   # Windows pywinpty backend
+├── scripts/
+│   └── link-vault.mjs          # 테스트 vault에 dist 산출물 링크
 ├── manifest.json
 ├── versions.json               # 마켓플레이스 버전 호환성 {"1.0.0": "0.15.0"}
-├── styles.css                  # xterm.js 스타일 + 플러그인 UI
+├── src/plugin.css              # xterm.js 스타일 + 플러그인 UI
+├── dist/                       # 배포 산출물
 ├── tsconfig.json
 ├── esbuild.config.mjs
 └── package.json
@@ -818,19 +882,24 @@ obsidian-vault-terminal/
 - PtyManager 연결 (stdin/stdout 바인딩)
 
 **PtyManager** (terminal/pty.ts)
-- node-pty IPty 인스턴스 생성/종료
-- 쉘 프로세스 관리 (bash/zsh/cmd)
+- Python helper child process 생성/종료
+- 쉘 프로세스 관리 (bash/zsh/fish/cmd/PowerShell)
 - 리사이즈 이벤트 처리
+
+**pythonRuntime** (terminal/pythonRuntime.ts)
+- Python 실행 파일 탐색/상태 확인
+- macOS/Linux `pty`, Windows `pywinpty` import 가능 여부 확인
+- Runtime 탭 진단 정보 제공
 
 **ActionRegistry** (actions/actionRegistry.ts)
 - 액션 정의 로드/등록
 - 커맨드 팔레트 통합
 
 **TemplateEngine** (actions/templateEngine.ts)
-- `{paramName}` 치환 로직
+- `{key}` 치환 로직
 
 **ScriptRunner** (actions/scriptRunner.ts)
-- `.vault-terminal/scripts/` 스캔 및 실행 (child_process)
+- 사용자 스크립트 실행 보조
 
 ---
 
@@ -845,7 +914,6 @@ obsidian-vault-terminal/
 | @xterm/addon-search | ^0.15.0 | 터미널 내 검색 |
 | @xterm/addon-web-links | ^0.11.0 | URL 자동 링크 (obsidian:// 포함) |
 | @xterm/addon-unicode11 | ^0.9.0 | Unicode 11 와이드 문자 지원 (한글 등) |
-| node-pty | ^1.0.0 | 실제 PTY 쉘 연결 |
 | ansi_up | ^6.0.2 | ANSI 이스케이프 시퀀스 파싱 (코드블록 정적 렌더링) |
 | obsidian | latest | 플러그인 API |
 
@@ -857,11 +925,11 @@ obsidian-vault-terminal/
 | esbuild | ^0.25.0 | 번들링 |
 | @types/node | ^16.0.0 | Node.js 타입 |
 
-### node-pty 빌드 주의사항
-- native addon — Electron 버전에 맞는 prebuilt 바이너리 필요
-- esbuild.config.mjs에서 `external: ['node-pty']` 설정
-- 빌드 시 `.node` 바이너리를 출력 디렉토리에 복사
-- 참고: polyipseity/obsidian-terminal 의 빌드 방식
+### Python PTY runtime 주의사항
+- macOS/Linux는 Python 3와 표준 `pty` 모듈 필요
+- Windows는 Python과 같은 Python 환경에 설치된 `pywinpty` 필요
+- Runtime 탭과 README에서 Python/pywinpty 상태 진단과 설치 가이드 제공
+- Python helper 파일은 `dist/python/`에 포함되어야 함
 
 ---
 
@@ -870,12 +938,11 @@ obsidian-vault-terminal/
 ### 9.1 라이선스
 - **플러그인**: MIT
 - **xterm.js**: MIT
-- **node-pty**: MIT
 - **Obsidian API**: Obsidian 커뮤니티 플러그인 규정 준수
 
 ### 9.2 플랫폼 제약
 - **지원 환경**: macOS, Linux, Windows
-- **모바일 불가**: node-pty native addon 특성상 데스크탑 전용
+- **모바일 불가**: Obsidian 모바일의 Node/Electron/Python 실행 환경 부재
 - **manifest.json**: `"isDesktopOnly": true` 필수
 - **최소 요구사항**: Obsidian 0.15.0+
 
@@ -884,12 +951,13 @@ obsidian-vault-terminal/
 ## 10. 개발 로드맵
 
 1. 개발 환경 구축 — package.json, tsconfig, esbuild, manifest 등
-2. xterm.js + node-pty 연결, 기본 터미널 렌더링, 액션 버튼 레이아웃
-3. 파라미터 다이얼로그, 템플릿 엔진, config 로드
-4. 경로 감지 및 링크 렌더링, 클릭 이벤트
-5. 스크립트 실행 시스템
-6. 컨텍스트 활용 (현재 노트, 선택 텍스트), 양방향 연계
-7. 커맨드 팔레트 통합, 버그 수정, 최종 테스트
+2. xterm.js + Python PTY 연결, 기본 터미널 렌더링, 액션 버튼 레이아웃
+3. data.json 기반 설정 저장, Runtime 진단, dist 배포 구조
+4. Wikilink 감지/렌더링, 파일 drag & drop, 터미널 resize 안정화
+5. Snippet 독립 모델 도입
+6. Action을 template + params 단순 치환 모델로 정리
+7. Toolbar를 action 버튼 나열과 variant 스타일 중심으로 정리
+8. 커맨드 팔레트 통합, 버그 수정, 최종 테스트
 
 ---
 
@@ -900,8 +968,6 @@ obsidian-vault-terminal/
 - 터미널 멀티탭 지원
 - 플러그인 마켓플레이스 배포
 - 모바일 지원
-- OS 파일 매니저에서 터미널로 드래그 앤 드롭 (경로 자동 입력)
-- Obsidian 파일 탐색기에서 터미널로 드래그 앤 드롭 (내부 이벤트 호환 여부 확인 필요)
 
 ---
 
@@ -912,7 +978,7 @@ obsidian-vault-terminal/
 - **vault-terminal**: 액션 + 양방향 연계 + 링크 변환 추가
 
 ### 12.2 설계 철학 정리
-1. **플러그인 책임**: 입출력 UI, 경로 변환, 링크 렌더링만
-2. **사용자 책임**: 스크립트 작성, 명령어 구성
-3. **명확한 분리**: 각 계층의 역할이 겹치지 않음
-4. **확장 가능성**: JSON 설정만 수정해서 커스터마이즈 가능
+1. **플러그인 책임**: 입력 resolve, 텍스트 조합, 터미널 전달, 링크 렌더링
+2. **템플릿 중심 제어**: 쉘 명령, AI CLI prompt, heredoc, redirection은 action template으로 표현
+3. **명확한 분리**: Snippet은 텍스트 조각, Action은 실행 단위, Toolbar는 배치 UI
+4. **확장 가능성**: data.json 설정과 향후 노트 기반 정의를 같은 모델로 매핑
