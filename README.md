@@ -6,7 +6,7 @@ It is a learning-oriented plugin project developed with AI-assisted coding workf
 
 ## Features
 
-- **Embedded terminal** — full PTY shell (zsh, bash, fish) inside Obsidian on macOS/Linux
+- **Embedded terminal** — full PTY shell inside Obsidian on macOS/Linux and Windows x64/ARM64
 - **Wikilink detection** — `[[links]]` in terminal output become clickable, opening the note directly
 - **File drag & drop** — drag files from the OS or Obsidian's file explorer into the terminal to insert the path
 - **Action buttons** — configurable toolbar buttons that send templated commands or run scripts with parameters

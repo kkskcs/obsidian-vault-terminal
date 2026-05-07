@@ -174,7 +174,7 @@ export class TerminalView extends ItemView {
 
     const vaultRoot = this.configManager.getVaultRoot();
     const config = this.configManager.get();
-    const pty = this.ptyManager.spawn({
+    const pty = await this.ptyManager.spawn({
       vaultRoot,
       pluginDir: this.pluginDir,
       env: flattenEnvVars(config.env),

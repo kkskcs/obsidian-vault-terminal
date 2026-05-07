@@ -132,11 +132,7 @@ class PythonPtyProcess implements PtyProcess {
 export class PtyManager {
   private pty: PtyProcess | null = null;
 
-  spawn(options: PtyOptions): PtyProcess {
-    if (process.platform === 'win32') {
-      throw new Error('Windows Python PTY backend is not implemented yet');
-    }
-
+  async spawn(options: PtyOptions): Promise<PtyProcess> {
     const { shell, args } = this.detectShell();
     const { vaultRoot, pluginDir, env = {}, locale = 'system', appLocale = 'en', cols = 80, rows = 24 } = options;
     const resolvedLocale = resolveLocale(locale, appLocale);
@@ -147,6 +143,7 @@ export class PtyManager {
     const helper = spawnProcess(this.detectPython(), [path.join(pluginDir, 'python', 'pty_helper.py')], {
       cwd: vaultRoot,
       stdio: 'pipe',
+      windowsHide: true,
     });
 
     this.pty = new PythonPtyProcess(helper);
@@ -189,11 +186,11 @@ export class PtyManager {
     this.pty = null;
   }
 
-  private detectPython(): string {
-    return process.env.VAULT_TERMINAL_PYTHON ?? 'python3';
-  }
-
   private detectShell(): { shell: string; args: string[] } {
+    if (process.platform === 'win32') {
+      return { shell: process.env.COMSPEC ?? 'cmd.exe', args: [] };
+    }
+
     const shell = process.env.SHELL ?? '/bin/bash';
     const shellName = path.basename(shell).toLowerCase();
 
@@ -206,5 +203,13 @@ export class PtyManager {
     }
 
     return { shell, args: [] };
+  }
+
+  private detectPython(): string {
+    if (process.env.VAULT_TERMINAL_PYTHON) {
+      return process.env.VAULT_TERMINAL_PYTHON;
+    }
+
+    return process.platform === 'win32' ? 'py' : 'python3';
   }
 }
