@@ -67,8 +67,7 @@ Python is resolved in this order:
 
 1. `Settings > Vault Terminal > Runtime > Python path`
 2. `VAULT_TERMINAL_PYTHON` environment variable
-3. `py` on Windows
-4. `python3` on macOS/Linux
+3. `python3` on all platforms
 
 ### macOS
 
@@ -102,14 +101,14 @@ sudo pacman -S python
 
 ### Windows
 
-Install Python and pywinpty, then reopen Obsidian and try again.
+Install Python 3 using the Python Install Manager from [python.org](https://www.python.org/downloads/), then install pywinpty and reopen Obsidian.
 
 ```powershell
-winget install Python.Python
-py -m pip install pywinpty
+winget install python3
+python3 -m pip install pywinpty
 ```
 
-If Python is not on `PATH`, open `Settings > Vault Terminal > Runtime` and set the Python path manually.
+If you have a legacy Python install (3.13 or earlier) that only provides `py`, open `Settings > Vault Terminal > Runtime` and set the Python path to `py`.
 
 ## License
 

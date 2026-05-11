@@ -1,5 +1,4 @@
-import { App, Notice, PluginSettingTab, Setting, setIcon } from 'obsidian';
-import type VaultTerminalPlugin from '../main';
+import { App, Notice, PluginSettingTab, setIcon, Setting } from 'obsidian';
 import {
   ConfigManager,
   LOCALE_OPTIONS,
@@ -8,18 +7,18 @@ import {
   PREDEFINED_PROFILES,
   ProfileTheme,
 } from '../config/configManager';
-import {
-  checkRuntimeStatus,
-  RuntimeStatus,
-} from '../terminal/pythonRuntime';
+import type VaultTerminalPlugin from '../main';
+import { checkRuntimeStatus, RuntimeStatus } from '../terminal/pythonRuntime';
 import { getSystemFonts } from '../utils/fonts';
 import { VT_ICON } from './iconRegistry';
 import { AUTHOR_NAME, openExternalUrl, REPOSITORY_URL, RUNTIME_SETUP_URL } from './links';
 import { EnvVarModal, ProfileNameModal } from './modals';
 
 type TabId = 'general' | 'profile' | 'toolbar' | 'snippets' | 'runtime' | 'about';
-type ToolbarDraftItem = { type: 'tool'; toolId: string } | { type: 'divider' } | { type: 'spacer'; units: number };
-
+type ToolbarDraftItem =
+  | { type: 'tool'; toolId: string }
+  | { type: 'divider' }
+  | { type: 'spacer'; units: number };
 
 const ANSI_COLORS: Array<{ key: keyof ProfileTheme; label: string }> = [
   { key: 'black', label: 'Black' },
@@ -154,7 +153,9 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
       .addDropdown((dd) => {
         dd.addOptions(LOCALE_OPTIONS);
         dd.setValue(this.configManager.get().locale ?? 'system').onChange(async (v) => {
-          this.configManager.update({ locale: v as import('../config/configManager').LocaleSetting });
+          this.configManager.update({
+            locale: v as import('../config/configManager').LocaleSetting,
+          });
           await this.configManager.save();
         });
         return dd;
@@ -166,7 +167,9 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
       .addDropdown((dd) => {
         dd.addOption('', '⚙ System default');
         dd.setValue(String(opts['fontFamily'] ?? '')).onChange(async (v) => {
-          this.configManager.update({ terminalOptions: { ...this.configManager.get().terminalOptions, fontFamily: v } });
+          this.configManager.update({
+            terminalOptions: { ...this.configManager.get().terminalOptions, fontFamily: v },
+          });
           await this.configManager.save();
         });
         getSystemFonts().then((fonts) => {
@@ -184,7 +187,12 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
           .setPlaceholder('12')
           .setValue(String(opts['fontSize'] ?? ''))
           .onChange(async (v) => {
-            this.configManager.update({ terminalOptions: { ...this.configManager.get().terminalOptions, fontSize: parseInt(v) || undefined } });
+            this.configManager.update({
+              terminalOptions: {
+                ...this.configManager.get().terminalOptions,
+                fontSize: parseInt(v) || undefined,
+              },
+            });
             await this.configManager.save();
           }),
       );
@@ -197,22 +205,27 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
           .setPlaceholder('1.0')
           .setValue(String(opts['lineHeight'] ?? ''))
           .onChange(async (v) => {
-            this.configManager.update({ terminalOptions: { ...this.configManager.get().terminalOptions, lineHeight: parseFloat(v) || undefined } });
+            this.configManager.update({
+              terminalOptions: {
+                ...this.configManager.get().terminalOptions,
+                lineHeight: parseFloat(v) || undefined,
+              },
+            });
             await this.configManager.save();
           }),
       );
 
-    new Setting(container)
-      .setName('Cursor style')
-      .addDropdown((dd) =>
-        dd
-          .addOptions({ block: 'Block', underline: 'Underline', bar: 'Bar' })
-          .setValue(String(opts['cursorStyle'] ?? 'block'))
-          .onChange(async (v) => {
-            this.configManager.update({ terminalOptions: { ...this.configManager.get().terminalOptions, cursorStyle: v } });
-            await this.configManager.save();
-          }),
-      );
+    new Setting(container).setName('Cursor style').addDropdown((dd) =>
+      dd
+        .addOptions({ block: 'Block', underline: 'Underline', bar: 'Bar' })
+        .setValue(String(opts['cursorStyle'] ?? 'block'))
+        .onChange(async (v) => {
+          this.configManager.update({
+            terminalOptions: { ...this.configManager.get().terminalOptions, cursorStyle: v },
+          });
+          await this.configManager.save();
+        }),
+    );
 
     new Setting(container)
       .setName('Scrollback')
@@ -222,7 +235,12 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
           .setPlaceholder('1000')
           .setValue(String(opts['scrollback'] ?? ''))
           .onChange(async (v) => {
-            this.configManager.update({ terminalOptions: { ...this.configManager.get().terminalOptions, scrollback: parseInt(v) || undefined } });
+            this.configManager.update({
+              terminalOptions: {
+                ...this.configManager.get().terminalOptions,
+                scrollback: parseInt(v) || undefined,
+              },
+            });
             await this.configManager.save();
           }),
       );
@@ -264,7 +282,6 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
           await this.configManager.save();
         }),
       );
-
   }
 
   private renderEnvSection(container: HTMLElement): void {
@@ -277,16 +294,32 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
     let builtinOpen = this.envSectionOpen.builtin ?? false;
     const builtinHeader = new Setting(container)
       .setName(`Built-in (${builtinVars.length})`)
-      .setDesc(this.buildTwoLineDesc('Read-only variables.', this.summarize(builtinVars.map(({ key }) => key)), !builtinOpen, true));
+      .setDesc(
+        this.buildTwoLineDesc(
+          'Read-only variables.',
+          this.summarize(builtinVars.map(({ key }) => key)),
+          !builtinOpen,
+          true,
+        ),
+      );
     builtinHeader.controlEl.createEl('span', { cls: 'vault-terminal-profile-expand-spacer' });
     builtinHeader.addExtraButton((b) => {
       b.setIcon(builtinOpen ? 'chevron-up' : 'chevron-down').setTooltip('Expand');
       b.onClick(() => {
         builtinOpen = !builtinOpen;
         this.envSectionOpen.builtin = builtinOpen;
-        const editorEl = container.querySelector('[data-env-section="builtin"]') as HTMLElement | null;
+        const editorEl = container.querySelector(
+          '[data-env-section="builtin"]',
+        ) as HTMLElement | null;
         editorEl?.toggleClass('is-open', builtinOpen);
-        builtinHeader.setDesc(this.buildTwoLineDesc('Read-only variables.', this.summarize(builtinVars.map(({ key }) => key)), !builtinOpen, true));
+        builtinHeader.setDesc(
+          this.buildTwoLineDesc(
+            'Read-only variables.',
+            this.summarize(builtinVars.map(({ key }) => key)),
+            !builtinOpen,
+            true,
+          ),
+        );
         b.setIcon(builtinOpen ? 'chevron-up' : 'chevron-down');
       });
       return b;
@@ -295,27 +328,43 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
     builtinBody.setAttribute('data-env-section', 'builtin');
     builtinBody.toggleClass('is-open', builtinOpen);
     for (const { key, desc } of builtinVars) {
-      new Setting(builtinBody)
-        .setName(key)
-        .setDesc(desc);
+      new Setting(builtinBody).setName(key).setDesc(desc);
     }
     container.createEl('hr', { cls: 'vault-terminal-settings-hr' });
 
     const env = this.configManager.get().env ?? {};
-    const entries = Object.entries(env).map(([key, entry]) => [key, normalizeEnvEntry(entry)] as const);
+    const entries = Object.entries(env).map(
+      ([key, entry]) => [key, normalizeEnvEntry(entry)] as const,
+    );
     let customOpen = this.envSectionOpen.custom ?? false;
     const customHeader = new Setting(container)
       .setName(`Custom (${entries.length})`)
-      .setDesc(this.buildTwoLineDesc('User-defined environment variables.', this.summarize(entries.map(([key]) => key)), !customOpen, true));
+      .setDesc(
+        this.buildTwoLineDesc(
+          'User-defined environment variables.',
+          this.summarize(entries.map(([key]) => key)),
+          !customOpen,
+          true,
+        ),
+      );
     customHeader.controlEl.createEl('span', { cls: 'vault-terminal-profile-expand-spacer' });
     customHeader.addExtraButton((b) => {
       b.setIcon(customOpen ? 'chevron-up' : 'chevron-down').setTooltip('Expand');
       b.onClick(() => {
         customOpen = !customOpen;
         this.envSectionOpen.custom = customOpen;
-        const editorEl = container.querySelector('[data-env-section="custom"]') as HTMLElement | null;
+        const editorEl = container.querySelector(
+          '[data-env-section="custom"]',
+        ) as HTMLElement | null;
         editorEl?.toggleClass('is-open', customOpen);
-        customHeader.setDesc(this.buildTwoLineDesc('User-defined environment variables.', this.summarize(entries.map(([key]) => key)), !customOpen, true));
+        customHeader.setDesc(
+          this.buildTwoLineDesc(
+            'User-defined environment variables.',
+            this.summarize(entries.map(([key]) => key)),
+            !customOpen,
+            true,
+          ),
+        );
         b.setIcon(customOpen ? 'chevron-up' : 'chevron-down');
       });
       return b;
@@ -341,13 +390,19 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
         s.setDesc(envVar.description);
       }
       s.addExtraButton((b) =>
-          b.setIcon('pencil').setTooltip('Edit').onClick(() => {
+        b
+          .setIcon('pencil')
+          .setTooltip('Edit')
+          .onClick(() => {
             new EnvVarModal(
               this.app,
               async (newKey, newValue, newDescription) => {
                 const newEnv = { ...this.configManager.get().env };
                 delete newEnv[key];
-                newEnv[newKey] = { value: newValue, description: newDescription.trim() || undefined };
+                newEnv[newKey] = {
+                  value: newValue,
+                  description: newDescription.trim() || undefined,
+                };
                 this.configManager.update({ env: newEnv });
                 await this.configManager.save();
               },
@@ -357,16 +412,18 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
               envVar.description ?? '',
             ).open();
           }),
-        )
-        .addExtraButton((b) =>
-          b.setIcon('trash').setTooltip('Delete').onClick(async () => {
+      ).addExtraButton((b) =>
+        b
+          .setIcon('trash')
+          .setTooltip('Delete')
+          .onClick(async () => {
             const newEnv = { ...this.configManager.get().env };
             delete newEnv[key];
             this.configManager.update({ env: newEnv });
             await this.configManager.save();
             this.display();
           }),
-        );
+      );
     }
 
     new Setting(customBody).addButton((b) =>
@@ -374,14 +431,18 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
         .setButtonText('Add variable')
         .setCta()
         .onClick(() => {
-          new EnvVarModal(this.app, async (newKey, newValue, newDescription) => {
-            const newEnv = {
-              ...this.configManager.get().env,
-              [newKey]: { value: newValue, description: newDescription.trim() || undefined },
-            };
-            this.configManager.update({ env: newEnv });
-            await this.configManager.save();
-          }, () => this.display()).open();
+          new EnvVarModal(
+            this.app,
+            async (newKey, newValue, newDescription) => {
+              const newEnv = {
+                ...this.configManager.get().env,
+                [newKey]: { value: newValue, description: newDescription.trim() || undefined },
+              };
+              this.configManager.update({ env: newEnv });
+              await this.configManager.save();
+            },
+            () => this.display(),
+          ).open();
         }),
     );
   }
@@ -487,11 +548,25 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
     let presetPaletteEl: HTMLElement;
 
     const PALETTE_KEYS: Array<keyof ProfileTheme> = [
-      'black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white',
-      'brightBlack', 'brightRed', 'brightGreen', 'brightYellow', 'brightBlue', 'brightMagenta', 'brightCyan', 'brightWhite',
+      'black',
+      'red',
+      'green',
+      'yellow',
+      'blue',
+      'magenta',
+      'cyan',
+      'white',
+      'brightBlack',
+      'brightRed',
+      'brightGreen',
+      'brightYellow',
+      'brightBlue',
+      'brightMagenta',
+      'brightCyan',
+      'brightWhite',
     ];
 
-    const initTheme = PREDEFINED_PROFILES[selectedPreset]?.theme ?? {} as ProfileTheme;
+    const initTheme = PREDEFINED_PROFILES[selectedPreset]?.theme ?? ({} as ProfileTheme);
     presetBgFgEl = addProfileSetting.controlEl.appendChild(this.buildBgFgSwatch(initTheme));
     presetPaletteEl = addProfileSetting.controlEl.appendChild(this.buildPaletteSwatch(initTheme));
     presetPaletteEl.style.marginRight = '6px';
@@ -501,56 +576,72 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
       cls: 'vault-terminal-settings-inline-label',
     });
 
-    addProfileSetting
-      .addDropdown((dd) => {
-        dd.addOptions(presetOptions);
-        dd.setValue(selectedPreset).onChange((v) => {
-          selectedPreset = v;
-          const t = PREDEFINED_PROFILES[v]?.theme;
-          if (t) {
-            presetBgFgEl.style.background = t.background ?? '#1e1e1e';
-            presetBgFgEl.style.color = t.foreground ?? '#d4d4d4';
-            const cells = presetPaletteEl.querySelectorAll('span');
-            cells.forEach((cell, i) => {
-              (cell as HTMLElement).style.background = (t[PALETTE_KEYS[i]] as string | undefined) ?? '#888';
-            });
-          }
-        });
-        return dd;
+    addProfileSetting.addDropdown((dd) => {
+      dd.addOptions(presetOptions);
+      dd.setValue(selectedPreset).onChange((v) => {
+        selectedPreset = v;
+        const t = PREDEFINED_PROFILES[v]?.theme;
+        if (t) {
+          presetBgFgEl.style.background = t.background ?? '#1e1e1e';
+          presetBgFgEl.style.color = t.foreground ?? '#d4d4d4';
+          const cells = presetPaletteEl.querySelectorAll('span');
+          cells.forEach((cell, i) => {
+            (cell as HTMLElement).style.background =
+              (t[PALETTE_KEYS[i]] as string | undefined) ?? '#888';
+          });
+        }
       });
+      return dd;
+    });
 
     addProfileSetting.addExtraButton((b) =>
-      b.setIcon('plus').setTooltip('Add').onClick(() => {
-        const suggestedName = this.uniqueProfileName(selectedPreset, existingNames);
-        new ProfileNameModal(this.app, existingNames, async (name) => {
-          const newProfiles = {
-            ...this.configManager.get().profiles,
-            [name]: { theme: PREDEFINED_PROFILES[selectedPreset].theme },
-          };
-          this.configManager.update({ profiles: newProfiles });
-          await this.configManager.save();
-        }, () => this.display(), suggestedName).open();
-      }),
+      b
+        .setIcon('plus')
+        .setTooltip('Add')
+        .onClick(() => {
+          const suggestedName = this.uniqueProfileName(selectedPreset, existingNames);
+          new ProfileNameModal(
+            this.app,
+            existingNames,
+            async (name) => {
+              const newProfiles = {
+                ...this.configManager.get().profiles,
+                [name]: { theme: PREDEFINED_PROFILES[selectedPreset].theme },
+              };
+              this.configManager.update({ profiles: newProfiles });
+              await this.configManager.save();
+            },
+            () => this.display(),
+            suggestedName,
+          ).open();
+        }),
     );
 
     new Setting(container)
       .setName('Reset all profiles')
       .setDesc('Restore all profiles to defaults and remove custom ones.')
       .addButton((b) =>
-        b.setButtonText('Reset').setWarning().onClick(async () => {
-          if (!confirm('Reset all profiles to defaults? Custom profiles will be deleted.')) return;
-          this.configManager.update({
-            profiles: { basic: PREDEFINED_PROFILES['basic'] },
-            defaultProfile: 'basic',
-          });
-          await this.configManager.save();
-          new Notice('Profiles reset to defaults.');
-          this.display();
-        }),
+        b
+          .setButtonText('Reset')
+          .setWarning()
+          .onClick(async () => {
+            if (!confirm('Reset all profiles to defaults? Custom profiles will be deleted.'))
+              return;
+            this.configManager.update({
+              profiles: { basic: PREDEFINED_PROFILES['basic'] },
+              defaultProfile: 'basic',
+            });
+            await this.configManager.save();
+            new Notice('Profiles reset to defaults.');
+            this.display();
+          }),
       );
 
     container.createEl('hr', { cls: 'vault-terminal-settings-hr' });
-    container.createEl('p', { text: `Profiles (${profileNames.length})`, cls: 'vault-terminal-settings-section-label' });
+    container.createEl('p', {
+      text: `Profiles (${profileNames.length})`,
+      cls: 'vault-terminal-settings-section-label',
+    });
 
     for (const name of profileNames) {
       const theme = profiles[name].theme;
@@ -582,51 +673,62 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
         .addExtraButton((b) => {
           b.setIcon('arrow-up').setTooltip('Move up');
           if (idx === 0) b.setDisabled(true);
-          else b.onClick(async () => {
-            const cfg = this.configManager.get();
-            const names = Object.keys(cfg.profiles ?? {});
-            const i = names.indexOf(name);
-            [names[i - 1], names[i]] = [names[i], names[i - 1]];
-            const reordered = Object.fromEntries(names.map((n) => [n, cfg.profiles![n]]));
-            this.configManager.update({ profiles: reordered });
-            await this.configManager.save();
-            this.display();
-          });
+          else
+            b.onClick(async () => {
+              const cfg = this.configManager.get();
+              const names = Object.keys(cfg.profiles ?? {});
+              const i = names.indexOf(name);
+              [names[i - 1], names[i]] = [names[i], names[i - 1]];
+              const reordered = Object.fromEntries(names.map((n) => [n, cfg.profiles![n]]));
+              this.configManager.update({ profiles: reordered });
+              await this.configManager.save();
+              this.display();
+            });
           return b;
         })
         .addExtraButton((b) => {
           b.setIcon('arrow-down').setTooltip('Move down');
           if (idx === profileNames.length - 1) b.setDisabled(true);
-          else b.onClick(async () => {
-            const cfg = this.configManager.get();
-            const names = Object.keys(cfg.profiles ?? {});
-            const i = names.indexOf(name);
-            [names[i], names[i + 1]] = [names[i + 1], names[i]];
-            const reordered = Object.fromEntries(names.map((n) => [n, cfg.profiles![n]]));
-            this.configManager.update({ profiles: reordered });
-            await this.configManager.save();
-            this.display();
-          });
+          else
+            b.onClick(async () => {
+              const cfg = this.configManager.get();
+              const names = Object.keys(cfg.profiles ?? {});
+              const i = names.indexOf(name);
+              [names[i], names[i + 1]] = [names[i + 1], names[i]];
+              const reordered = Object.fromEntries(names.map((n) => [n, cfg.profiles![n]]));
+              this.configManager.update({ profiles: reordered });
+              await this.configManager.save();
+              this.display();
+            });
           return b;
         })
         .addExtraButton((b) =>
-          b.setIcon('pencil').setTooltip('Rename').onClick(() => {
-            const currentNames = new Set(Object.keys(this.configManager.get().profiles ?? {}));
-            currentNames.delete(name);
-            new ProfileNameModal(this.app, currentNames, async (newName) => {
-              const cfg = this.configManager.get();
-              const updatedProfiles = { ...cfg.profiles };
-              updatedProfiles[newName] = updatedProfiles[name];
-              delete updatedProfiles[name];
-              const toolbar = (cfg.toolbar ?? []).map((id) => id === name ? newName : id);
-              this.configManager.update({
-                profiles: updatedProfiles,
-                defaultProfile: cfg.defaultProfile === name ? newName : cfg.defaultProfile,
-                toolbar,
-              });
-              await this.configManager.save();
-            }, () => this.display(), name).open();
-          }),
+          b
+            .setIcon('pencil')
+            .setTooltip('Rename')
+            .onClick(() => {
+              const currentNames = new Set(Object.keys(this.configManager.get().profiles ?? {}));
+              currentNames.delete(name);
+              new ProfileNameModal(
+                this.app,
+                currentNames,
+                async (newName) => {
+                  const cfg = this.configManager.get();
+                  const updatedProfiles = { ...cfg.profiles };
+                  updatedProfiles[newName] = updatedProfiles[name];
+                  delete updatedProfiles[name];
+                  const toolbar = (cfg.toolbar ?? []).map((id) => (id === name ? newName : id));
+                  this.configManager.update({
+                    profiles: updatedProfiles,
+                    defaultProfile: cfg.defaultProfile === name ? newName : cfg.defaultProfile,
+                    toolbar,
+                  });
+                  await this.configManager.save();
+                },
+                () => this.display(),
+                name,
+              ).open();
+            }),
         )
         .addExtraButton((b) => {
           b.setIcon('trash').setTooltip('Delete');
@@ -638,7 +740,8 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
               const newProfiles = { ...this.configManager.get().profiles };
               delete newProfiles[name];
               const currentDefault = this.configManager.get().defaultProfile;
-              const newDefault = currentDefault === name ? Object.keys(newProfiles)[0] : currentDefault;
+              const newDefault =
+                currentDefault === name ? Object.keys(newProfiles)[0] : currentDefault;
               this.configManager.update({ profiles: newProfiles, defaultProfile: newDefault });
               await this.configManager.save();
               this.display();
@@ -655,7 +758,9 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
         b.setIcon('chevron-down').setTooltip('Expand');
         b.onClick(() => {
           isOpen = !isOpen;
-          const editorEl = container.querySelector(`[data-profile="${name}"]`) as HTMLElement | null;
+          const editorEl = container.querySelector(
+            `[data-profile="${name}"]`,
+          ) as HTMLElement | null;
           editorEl?.toggleClass('is-open', isOpen);
           b.setIcon(isOpen ? 'chevron-up' : 'chevron-down');
         });
@@ -666,16 +771,30 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
       editorEl.setAttribute('data-profile', name);
       this.renderProfileEditor(editorEl, name, theme);
     }
-
   }
 
   private buildPaletteSwatch(theme: ProfileTheme): HTMLElement {
     const PALETTE_KEYS: Array<keyof ProfileTheme> = [
-      'black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white',
-      'brightBlack', 'brightRed', 'brightGreen', 'brightYellow', 'brightBlue', 'brightMagenta', 'brightCyan', 'brightWhite',
+      'black',
+      'red',
+      'green',
+      'yellow',
+      'blue',
+      'magenta',
+      'cyan',
+      'white',
+      'brightBlack',
+      'brightRed',
+      'brightGreen',
+      'brightYellow',
+      'brightBlue',
+      'brightMagenta',
+      'brightCyan',
+      'brightWhite',
     ];
     const wrap = document.createElement('span');
-    wrap.style.cssText = 'display:inline-grid;grid-template-columns:repeat(8,5px);grid-template-rows:repeat(2,5px);gap:1px;margin-right:4px;vertical-align:middle;flex-shrink:0;border-radius:2px;overflow:hidden;border:1px solid rgba(128,128,128,0.3);';
+    wrap.style.cssText =
+      'display:inline-grid;grid-template-columns:repeat(8,5px);grid-template-rows:repeat(2,5px);gap:1px;margin-right:4px;vertical-align:middle;flex-shrink:0;border-radius:2px;overflow:hidden;border:1px solid rgba(128,128,128,0.3);';
     for (const key of PALETTE_KEYS) {
       const cell = document.createElement('span');
       cell.style.cssText = `display:block;width:5px;height:5px;background:${(theme[key] as string | undefined) ?? '#888'};`;
@@ -699,11 +818,14 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
   }
 
   private findSwatch(container: HTMLElement, name: string): HTMLElement | null {
-    return container
-      .closest('.vault-terminal-settings-body')
-      ?.querySelector(`[data-profile="${name}"]`)
-      ?.previousElementSibling
-      ?.querySelector('.vault-terminal-profile-swatch') as HTMLElement | null ?? null;
+    return (
+      (container
+        .closest('.vault-terminal-settings-body')
+        ?.querySelector(`[data-profile="${name}"]`)
+        ?.previousElementSibling?.querySelector(
+          '.vault-terminal-profile-swatch',
+        ) as HTMLElement | null) ?? null
+    );
   }
 
   private renderProfileEditor(container: HTMLElement, name: string, theme: ProfileTheme): void {
@@ -725,45 +847,48 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
     // Base colors
     container.createEl('p', { text: 'Base', cls: 'vault-terminal-settings-section-label' });
 
-    new Setting(container)
-      .setName('Background')
-      .addColorPicker((cp) =>
-        cp.setValue(theme.background ?? '#1e1e1e').onChange(async (v) => {
-          const profiles = this.configManager.get().profiles ?? {};
-          this.configManager.update({
-            profiles: { ...profiles, [name]: { ...profiles[name], theme: { ...profiles[name].theme, background: v } } },
-          });
-          await this.configManager.save();
-          const swatch = this.findSwatch(container, name);
-          if (swatch) swatch.style.backgroundColor = v;
-        }),
-      );
+    new Setting(container).setName('Background').addColorPicker((cp) =>
+      cp.setValue(theme.background ?? '#1e1e1e').onChange(async (v) => {
+        const profiles = this.configManager.get().profiles ?? {};
+        this.configManager.update({
+          profiles: {
+            ...profiles,
+            [name]: { ...profiles[name], theme: { ...profiles[name].theme, background: v } },
+          },
+        });
+        await this.configManager.save();
+        const swatch = this.findSwatch(container, name);
+        if (swatch) swatch.style.backgroundColor = v;
+      }),
+    );
 
-    new Setting(container)
-      .setName('Foreground')
-      .addColorPicker((cp) =>
-        cp.setValue(theme.foreground ?? '#d4d4d4').onChange(async (v) => {
-          const profiles = this.configManager.get().profiles ?? {};
-          this.configManager.update({
-            profiles: { ...profiles, [name]: { ...profiles[name], theme: { ...profiles[name].theme, foreground: v } } },
-          });
-          await this.configManager.save();
-          const swatch = this.findSwatch(container, name);
-          if (swatch) swatch.style.color = v;
-        }),
-      );
+    new Setting(container).setName('Foreground').addColorPicker((cp) =>
+      cp.setValue(theme.foreground ?? '#d4d4d4').onChange(async (v) => {
+        const profiles = this.configManager.get().profiles ?? {};
+        this.configManager.update({
+          profiles: {
+            ...profiles,
+            [name]: { ...profiles[name], theme: { ...profiles[name].theme, foreground: v } },
+          },
+        });
+        await this.configManager.save();
+        const swatch = this.findSwatch(container, name);
+        if (swatch) swatch.style.color = v;
+      }),
+    );
 
-    new Setting(container)
-      .setName('Cursor')
-      .addColorPicker((cp) =>
-        cp.setValue(theme.cursor ?? '#d4d4d4').onChange(async (v) => {
-          const profiles = this.configManager.get().profiles ?? {};
-          this.configManager.update({
-            profiles: { ...profiles, [name]: { ...profiles[name], theme: { ...profiles[name].theme, cursor: v } } },
-          });
-          await this.configManager.save();
-        }),
-      );
+    new Setting(container).setName('Cursor').addColorPicker((cp) =>
+      cp.setValue(theme.cursor ?? '#d4d4d4').onChange(async (v) => {
+        const profiles = this.configManager.get().profiles ?? {};
+        this.configManager.update({
+          profiles: {
+            ...profiles,
+            [name]: { ...profiles[name], theme: { ...profiles[name].theme, cursor: v } },
+          },
+        });
+        await this.configManager.save();
+      }),
+    );
 
     // ANSI palette
     container.createEl('p', { text: 'ANSI Palette', cls: 'vault-terminal-settings-section-label' });
@@ -777,12 +902,14 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
       picker.addEventListener('change', async () => {
         const profiles = this.configManager.get().profiles ?? {};
         this.configManager.update({
-          profiles: { ...profiles, [name]: { ...profiles[name], theme: { ...profiles[name]?.theme, [key]: picker.value } } },
+          profiles: {
+            ...profiles,
+            [name]: { ...profiles[name], theme: { ...profiles[name]?.theme, [key]: picker.value } },
+          },
         });
         await this.configManager.save();
       });
     }
-
   }
 
   // ──────────────────────────────────────────────
@@ -807,24 +934,44 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
       { name: 'Profile', icon: 'palette', desc: 'Switch terminal profile quickly.' },
       { name: 'Fullscreen', icon: 'maximize-2', desc: 'Toggle terminal fullscreen mode.' },
       { name: 'New Window', icon: 'external-link', desc: 'Open terminal in a separate window.' },
-      { name: 'Note → Terminal', icon: 'file-input', desc: 'Send note content or selection to terminal.' },
+      {
+        name: 'Note → Terminal',
+        icon: 'file-input',
+        desc: 'Send note content or selection to terminal.',
+      },
       { name: 'Terminal → Note', icon: 'file-output', desc: 'Capture terminal output into note.' },
     ];
-    const actions = (this.configManager.get().actions ?? []).filter((action) => action.mode !== 'passthrough');
+    const actions = (this.configManager.get().actions ?? []).filter(
+      (action) => action.mode !== 'passthrough',
+    );
     let builtinOpen = this.toolsSectionOpen.builtin ?? false;
 
     const builtinHeader = new Setting(container)
       .setName(`Built-in tools (${builtinTools.length})`)
-      .setDesc(this.buildTwoLineDesc('Plugin-provided tools.', this.summarize(builtinTools.map((tool) => tool.name)), !builtinOpen));
+      .setDesc(
+        this.buildTwoLineDesc(
+          'Plugin-provided tools.',
+          this.summarize(builtinTools.map((tool) => tool.name)),
+          !builtinOpen,
+        ),
+      );
     builtinHeader.controlEl.createEl('span', { cls: 'vault-terminal-profile-expand-spacer' });
     builtinHeader.addExtraButton((b) => {
       b.setIcon(builtinOpen ? 'chevron-up' : 'chevron-down').setTooltip('Expand');
       b.onClick(() => {
         builtinOpen = !builtinOpen;
         this.toolsSectionOpen.builtin = builtinOpen;
-        const editorEl = container.querySelector('[data-tools-section="builtin"]') as HTMLElement | null;
+        const editorEl = container.querySelector(
+          '[data-tools-section="builtin"]',
+        ) as HTMLElement | null;
         editorEl?.toggleClass('is-open', builtinOpen);
-        builtinHeader.setDesc(this.buildTwoLineDesc('Plugin-provided tools.', this.summarize(builtinTools.map((tool) => tool.name)), !builtinOpen));
+        builtinHeader.setDesc(
+          this.buildTwoLineDesc(
+            'Plugin-provided tools.',
+            this.summarize(builtinTools.map((tool) => tool.name)),
+            !builtinOpen,
+          ),
+        );
         b.setIcon(builtinOpen ? 'chevron-up' : 'chevron-down');
       });
       return b;
@@ -835,9 +982,7 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
     builtinBody.toggleClass('is-open', builtinOpen);
 
     for (const tool of builtinTools) {
-      const s = new Setting(builtinBody)
-        .setName(tool.name)
-        .setDesc(tool.desc);
+      const s = new Setting(builtinBody).setName(tool.name).setDesc(tool.desc);
       const icon = document.createElement('span');
       icon.style.marginRight = '8px';
       setIcon(icon, tool.icon);
@@ -848,16 +993,30 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
     let customOpen = this.toolsSectionOpen.custom ?? false;
     const customHeader = new Setting(container)
       .setName(`Custom tools (${actions.length})`)
-      .setDesc(this.buildTwoLineDesc('User-defined tools for snippets/scripts.', this.summarize(actions.map((action) => action.label)), !customOpen));
+      .setDesc(
+        this.buildTwoLineDesc(
+          'User-defined tools for snippets/scripts.',
+          this.summarize(actions.map((action) => action.label)),
+          !customOpen,
+        ),
+      );
     customHeader.controlEl.createEl('span', { cls: 'vault-terminal-profile-expand-spacer' });
     customHeader.addExtraButton((b) => {
       b.setIcon(customOpen ? 'chevron-up' : 'chevron-down').setTooltip('Expand');
       b.onClick(() => {
         customOpen = !customOpen;
         this.toolsSectionOpen.custom = customOpen;
-        const editorEl = container.querySelector('[data-tools-section="custom"]') as HTMLElement | null;
+        const editorEl = container.querySelector(
+          '[data-tools-section="custom"]',
+        ) as HTMLElement | null;
         editorEl?.toggleClass('is-open', customOpen);
-        customHeader.setDesc(this.buildTwoLineDesc('User-defined tools for snippets/scripts.', this.summarize(actions.map((action) => action.label)), !customOpen));
+        customHeader.setDesc(
+          this.buildTwoLineDesc(
+            'User-defined tools for snippets/scripts.',
+            this.summarize(actions.map((action) => action.label)),
+            !customOpen,
+          ),
+        );
         b.setIcon(customOpen ? 'chevron-up' : 'chevron-down');
       });
       return b;
@@ -878,8 +1037,18 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
       const s = new Setting(customBody)
         .setName(action.label)
         .setDesc(`${action.mode}${action.command ? ` · ${action.command}` : ''}`)
-        .addExtraButton((b) => b.setIcon('pencil').setTooltip('Edit').onClick(() => {}))
-        .addExtraButton((b) => b.setIcon('trash').setTooltip('Delete').onClick(() => {}));
+        .addExtraButton((b) =>
+          b
+            .setIcon('pencil')
+            .setTooltip('Edit')
+            .onClick(() => {}),
+        )
+        .addExtraButton((b) =>
+          b
+            .setIcon('trash')
+            .setTooltip('Delete')
+            .onClick(() => {}),
+        );
       const icon = document.createElement('span');
       icon.style.marginRight = '8px';
       setIcon(icon, action.icon ?? 'terminal');
@@ -918,32 +1087,38 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
       const rowSetting = new Setting(container)
         .setName(rowLabel)
         .addExtraButton((b) => {
-          b.setIcon('plus').setTooltip('Tool').onClick(() => {
-            const firstTool = toolActions[0]?.id;
-            if (!firstTool) return;
-            const rows = [...(this.toolbarRowsDraft ?? [])];
-            rows[rowIndex] = [{ type: 'tool', toolId: firstTool }];
-            this.toolbarRowsDraft = rows;
-            this.display();
-          });
+          b.setIcon('plus')
+            .setTooltip('Tool')
+            .onClick(() => {
+              const firstTool = toolActions[0]?.id;
+              if (!firstTool) return;
+              const rows = [...(this.toolbarRowsDraft ?? [])];
+              rows[rowIndex] = [{ type: 'tool', toolId: firstTool }];
+              this.toolbarRowsDraft = rows;
+              this.display();
+            });
           return b;
         })
         .addExtraButton((b) => {
-          b.setIcon(VT_ICON.toolbarDivider).setTooltip('Divider').onClick(() => {
-            const rows = [...(this.toolbarRowsDraft ?? [])];
-            rows[rowIndex] = [{ type: 'divider' }];
-            this.toolbarRowsDraft = rows;
-            this.display();
-          });
+          b.setIcon(VT_ICON.toolbarDivider)
+            .setTooltip('Divider')
+            .onClick(() => {
+              const rows = [...(this.toolbarRowsDraft ?? [])];
+              rows[rowIndex] = [{ type: 'divider' }];
+              this.toolbarRowsDraft = rows;
+              this.display();
+            });
           return b;
         })
         .addExtraButton((b) => {
-          b.setIcon('square-dashed').setTooltip('Spacer').onClick(() => {
-            const rows = [...(this.toolbarRowsDraft ?? [])];
-            rows[rowIndex] = [{ type: 'spacer', units: 1 }];
-            this.toolbarRowsDraft = rows;
-            this.display();
-          });
+          b.setIcon('square-dashed')
+            .setTooltip('Spacer')
+            .onClick(() => {
+              const rows = [...(this.toolbarRowsDraft ?? [])];
+              rows[rowIndex] = [{ type: 'spacer', units: 1 }];
+              this.toolbarRowsDraft = rows;
+              this.display();
+            });
           return b;
         });
       rowSetting.controlEl.createEl('span', { cls: 'vault-terminal-profile-expand-spacer' });
@@ -969,7 +1144,9 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
         b.onClick(() => {
           const next = !(this.toolbarRowOpen[rowIndex] ?? false);
           this.toolbarRowOpen[rowIndex] = next;
-          const editorEl = container.querySelector(`[data-toolbar-row="${rowIndex}"]`) as HTMLElement | null;
+          const editorEl = container.querySelector(
+            `[data-toolbar-row="${rowIndex}"]`,
+          ) as HTMLElement | null;
           editorEl?.toggleClass('is-open', next);
           b.setIcon(next ? 'chevron-up' : 'chevron-down');
         });
@@ -990,26 +1167,36 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
             return dd;
           })
           .addExtraButton((b) =>
-            b.setIcon('check').setTooltip('Apply').onClick(() => {
-              const rows = [...(this.toolbarRowsDraft ?? [])];
-              rows[rowIndex] = [{ type: 'tool', toolId: currentToolId }];
-              this.toolbarRowsDraft = rows;
-              this.display();
-            }),
+            b
+              .setIcon('check')
+              .setTooltip('Apply')
+              .onClick(() => {
+                const rows = [...(this.toolbarRowsDraft ?? [])];
+                rows[rowIndex] = [{ type: 'tool', toolId: currentToolId }];
+                this.toolbarRowsDraft = rows;
+                this.display();
+              }),
           );
       } else if (item?.type === 'spacer') {
         let units = String(item.units);
         new Setting(rowBody)
           .setName('Spacer units')
-          .addText((t) => t.setValue(units).onChange((v) => { units = v; }))
-          .addExtraButton((b) =>
-            b.setIcon('check').setTooltip('Apply').onClick(() => {
-              const parsed = Math.max(1, parseInt(units, 10) || 1);
-              const rows = [...(this.toolbarRowsDraft ?? [])];
-              rows[rowIndex] = [{ type: 'spacer', units: parsed }];
-              this.toolbarRowsDraft = rows;
-              this.display();
+          .addText((t) =>
+            t.setValue(units).onChange((v) => {
+              units = v;
             }),
+          )
+          .addExtraButton((b) =>
+            b
+              .setIcon('check')
+              .setTooltip('Apply')
+              .onClick(() => {
+                const parsed = Math.max(1, parseInt(units, 10) || 1);
+                const rows = [...(this.toolbarRowsDraft ?? [])];
+                rows[rowIndex] = [{ type: 'spacer', units: parsed }];
+                this.toolbarRowsDraft = rows;
+                this.display();
+              }),
           );
       } else if (item?.type === 'divider') {
         rowBody.createEl('p', { text: 'Divider', cls: 'vault-terminal-settings-empty' });
@@ -1017,11 +1204,16 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
     });
 
     new Setting(container)
-        .setName('Reset to defaults')
-        .setDesc('Restore toolbar rows from current registered toolbar tools.')
-        .addExtraButton((b) =>
-          b.setIcon('rotate-ccw').setTooltip('Reset').onClick(() => {
-            const legacy = (this.configManager.get().toolbar ?? []).filter((id) => toolActions.some((a) => a.id === id));
+      .setName('Reset to defaults')
+      .setDesc('Restore toolbar rows from current registered toolbar tools.')
+      .addExtraButton((b) =>
+        b
+          .setIcon('rotate-ccw')
+          .setTooltip('Reset')
+          .onClick(() => {
+            const legacy = (this.configManager.get().toolbar ?? []).filter((id) =>
+              toolActions.some((a) => a.id === id),
+            );
             this.toolbarRowsDraft = [0, 1].map((i) =>
               legacy[i] ? [{ type: 'tool', toolId: legacy[i] } as ToolbarDraftItem] : [],
             );
@@ -1031,7 +1223,7 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
             new Notice('Toolbar rows reset.');
             this.display();
           }),
-        );
+      );
   }
 
   private renderSnippetsTab(container: HTMLElement): void {
@@ -1053,7 +1245,13 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
 
     new Setting(container)
       .setName('Groups')
-      .setDesc(this.buildTwoLineDesc('Create free-form groups and manage snippets inside each section.', [], false))
+      .setDesc(
+        this.buildTwoLineDesc(
+          'Create free-form groups and manage snippets inside each section.',
+          [],
+          false,
+        ),
+      )
       .addButton((b) =>
         b
           .setButtonText('Add group')
@@ -1070,20 +1268,36 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
       );
 
     for (const group of this.snippetGroups) {
-      const groupSnippets = snippetLike.filter((action) => (action.group?.trim() || 'Common') === group);
+      const groupSnippets = snippetLike.filter(
+        (action) => (action.group?.trim() || 'Common') === group,
+      );
       let isOpen = this.snippetGroupOpen[group] ?? false;
       const setting = new Setting(container)
         .setName(group)
-        .setDesc(this.buildTwoLineDesc(`${groupSnippets.length} snippet(s)`, this.summarize(groupSnippets.map((action) => action.label)), !isOpen));
+        .setDesc(
+          this.buildTwoLineDesc(
+            `${groupSnippets.length} snippet(s)`,
+            this.summarize(groupSnippets.map((action) => action.label)),
+            !isOpen,
+          ),
+        );
       setting.controlEl.createEl('span', { cls: 'vault-terminal-profile-expand-spacer' });
       setting.addExtraButton((b) => {
         b.setIcon(isOpen ? 'chevron-up' : 'chevron-down').setTooltip('Expand');
         b.onClick(() => {
           isOpen = !isOpen;
           this.snippetGroupOpen[group] = isOpen;
-          const editorEl = container.querySelector(`[data-snippet-group="${group}"]`) as HTMLElement | null;
+          const editorEl = container.querySelector(
+            `[data-snippet-group="${group}"]`,
+          ) as HTMLElement | null;
           editorEl?.toggleClass('is-open', isOpen);
-          setting.setDesc(this.buildTwoLineDesc(`${groupSnippets.length} snippet(s)`, this.summarize(groupSnippets.map((action) => action.label)), !isOpen));
+          setting.setDesc(
+            this.buildTwoLineDesc(
+              `${groupSnippets.length} snippet(s)`,
+              this.summarize(groupSnippets.map((action) => action.label)),
+              !isOpen,
+            ),
+          );
           b.setIcon(isOpen ? 'chevron-up' : 'chevron-down');
         });
         return b;
@@ -1106,8 +1320,18 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
         new Setting(groupBody)
           .setName(action.label)
           .setDesc(preview)
-          .addExtraButton((b) => b.setIcon('pencil').setTooltip('Edit').onClick(() => {}))
-          .addExtraButton((b) => b.setIcon('trash').setTooltip('Delete').onClick(() => {}));
+          .addExtraButton((b) =>
+            b
+              .setIcon('pencil')
+              .setTooltip('Edit')
+              .onClick(() => {}),
+          )
+          .addExtraButton((b) =>
+            b
+              .setIcon('trash')
+              .setTooltip('Delete')
+              .onClick(() => {}),
+          );
       }
 
       new Setting(groupBody).addButton((b) =>
@@ -1124,18 +1348,22 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
 
     const status = this.runtimeStatus;
     const summary = status
-      ? (status.available ? 'Ready' : 'Needs setup')
-      : (this.runtimeStatusLoading ? 'Checking...' : 'Not checked');
+      ? status.available
+        ? 'Ready'
+        : 'Needs setup'
+      : this.runtimeStatusLoading
+        ? 'Checking...'
+        : 'Not checked';
 
     const runtimeHeaderSetting = new Setting(container)
       .setName('Terminal runtime')
-      .setDesc(`${summary}. Python backend used to start terminal sessions.${this.runtimeLastChecked ? ` Last checked: ${this.runtimeLastChecked}.` : ''}`)
+      .setDesc(
+        `${summary}. Python backend used to start terminal sessions.${this.runtimeLastChecked ? ` Last checked: ${this.runtimeLastChecked}.` : ''}`,
+      )
       .addButton((b) =>
-        b
-          .setButtonText('Check again')
-          .onClick(() => {
-            this.refreshRuntimeStatus();
-          }),
+        b.setButtonText('Check again').onClick(() => {
+          this.refreshRuntimeStatus();
+        }),
       );
     if (status && !status.available) {
       runtimeHeaderSetting.settingEl.addClass('vault-terminal-runtime-status-error');
@@ -1145,13 +1373,19 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
     const pythonPathDesc = [
       'Optional explicit Python executable path. Leave empty to auto-detect from the current environment.',
       status?.pythonPath ? `Current: ${status.pythonPath}` : undefined,
-    ].filter((line): line is string => Boolean(line)).join(' ');
+    ]
+      .filter((line): line is string => Boolean(line))
+      .join(' ');
     const pythonPathSetting = new Setting(container)
       .setName('Python path')
       .setDesc(pythonPathDesc)
       .addText((text) =>
         text
-          .setPlaceholder(process.platform === 'win32' ? 'python.exe or C:\\Path\\to\\python.exe' : 'python3 or /usr/bin/python3')
+          .setPlaceholder(
+            process.platform === 'win32'
+              ? 'python3 or C:\\Path\\to\\python3.exe'
+              : 'python3 or /path/to/python3',
+          )
           .setValue(runtimeConfig.pythonPath ?? '')
           .onChange(async (value) => {
             this.configManager.update({
@@ -1167,7 +1401,9 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
 
     if (!status) {
       container.createEl('p', {
-        text: this.runtimeStatusLoading ? 'Checking runtime status...' : 'Click Check again to inspect the runtime.',
+        text: this.runtimeStatusLoading
+          ? 'Checking runtime status...'
+          : 'Click Check again to inspect the runtime.',
         cls: 'vault-terminal-settings-empty',
       });
       if (!this.runtimeStatusLoading) {
@@ -1178,7 +1414,11 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
 
     this.renderRuntimeStatusRows(container, status);
 
-    const setupGuideSetting = this.renderExternalLink(container, 'Runtime setup guide', RUNTIME_SETUP_URL);
+    const setupGuideSetting = this.renderExternalLink(
+      container,
+      'Runtime setup guide',
+      RUNTIME_SETUP_URL,
+    );
     if (!status.available) {
       setupGuideSetting.settingEl.addClass('vault-terminal-runtime-status-error');
     }
@@ -1229,29 +1469,19 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
       .setName('Vault Terminal')
       .setDesc('Embedded terminal for Obsidian with vault-aware actions and links.');
 
-    new Setting(container)
-      .setName('Version')
-      .setDesc(this.vaultTerminalPlugin.manifest.version);
+    new Setting(container).setName('Version').setDesc(this.vaultTerminalPlugin.manifest.version);
 
-    new Setting(container)
-      .setName('Author')
-      .setDesc(AUTHOR_NAME);
+    new Setting(container).setName('Author').setDesc(AUTHOR_NAME);
 
     this.renderExternalLink(container, 'GitHub repository', REPOSITORY_URL);
 
-    new Setting(container)
-      .setName('License')
-      .setDesc('MIT');
+    new Setting(container).setName('License').setDesc('MIT');
   }
 
   private renderExternalLink(container: HTMLElement, name: string, url: string): Setting {
     return new Setting(container)
       .setName(name)
       .setDesc(url)
-      .addButton((button) =>
-        button
-          .setButtonText('Open')
-          .onClick(() => openExternalUrl(url)),
-      );
+      .addButton((button) => button.setButtonText('Open').onClick(() => openExternalUrl(url)));
   }
 }

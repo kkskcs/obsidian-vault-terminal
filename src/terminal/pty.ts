@@ -150,11 +150,37 @@ export class PtyManager {
       ? { LANG: resolvedLocale, LC_ALL: resolvedLocale }
       : { LC_CTYPE: 'UTF-8' };
 
-    const helper = spawnProcess(this.detectPython(pythonPath), [path.join(pluginDir, 'python', 'pty_helper.py')], {
-      cwd: vaultRoot,
-      stdio: 'pipe',
-      windowsHide: true,
-    });
+    const helperScript = path.join(pluginDir, 'python', 'pty_helper.py');
+    const candidates = this.detectPythonCandidates(pythonPath);
+
+    let helper: ChildProcessWithoutNullStreams | null = null;
+    for (const candidate of candidates) {
+      const proc = spawnProcess(candidate, [helperScript], {
+        cwd: vaultRoot,
+        stdio: 'pipe',
+        windowsHide: true,
+      });
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const onError = (err: Error) => { cleanup(); reject(err); };
+          const onSpawn = () => { cleanup(); resolve(); };
+          const cleanup = () => {
+            proc.removeListener('error', onError);
+            proc.removeListener('spawn', onSpawn);
+          };
+          proc.on('error', onError);
+          proc.on('spawn', onSpawn);
+        });
+        helper = proc;
+        break;
+      } catch {
+        // try next candidate
+      }
+    }
+
+    if (!helper) {
+      throw new Error(`Could not find Python. Tried: ${candidates.join(', ')}`);
+    }
 
     this.pty = new PythonPtyProcess(helper);
     (this.pty as PythonPtyProcess).send({
@@ -215,9 +241,9 @@ export class PtyManager {
     return { shell, args: [] };
   }
 
-  private detectPython(pythonPath?: string): string {
-    if (pythonPath) return pythonPath;
-    if (process.env.VAULT_TERMINAL_PYTHON) return process.env.VAULT_TERMINAL_PYTHON;
-    return process.platform === 'win32' ? 'py' : 'python3';
+  private detectPythonCandidates(pythonPath?: string): string[] {
+    if (pythonPath) return [pythonPath];
+    if (process.env.VAULT_TERMINAL_PYTHON) return [process.env.VAULT_TERMINAL_PYTHON];
+    return process.platform === 'win32' ? ['python3', 'py'] : ['python3'];
   }
 }
