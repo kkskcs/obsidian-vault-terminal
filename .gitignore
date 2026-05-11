@@ -6,5 +6,8 @@ data.json
 node_modules/
 package-lock.json
 
+# Release
+*.zip
+
 # IDE
 .idea/
