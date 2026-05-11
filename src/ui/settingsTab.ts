@@ -1,4 +1,4 @@
-import { App, Notice, PluginSettingTab, setIcon, Setting } from 'obsidian';
+import { App, Menu, Notice, PluginSettingTab, setIcon, Setting } from 'obsidian';
 import {
   ConfigManager,
   LOCALE_OPTIONS,
@@ -1369,7 +1369,7 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
       runtimeHeaderSetting.settingEl.addClass('vault-terminal-runtime-status-error');
     }
 
-    const runtimeConfig = this.configManager.get().runtime ?? {};
+    const runtimeConfig = this.configManager.getMachineRuntime();
     const pythonPathDesc = [
       'Optional explicit Python executable path. Leave empty to auto-detect from the current environment.',
       status?.pythonPath ? `Current: ${status.pythonPath}` : undefined,
@@ -1382,22 +1382,53 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
       .addText((text) =>
         text
           .setPlaceholder(
-            process.platform === 'win32'
-              ? 'python3 or C:\\Path\\to\\python3.exe'
-              : 'python3 or /path/to/python3',
+            process.platform === 'win32' ? 'python3 or py' : 'python3 or /path/to/python3',
           )
           .setValue(runtimeConfig.pythonPath ?? '')
           .onChange(async (value) => {
-            this.configManager.update({
-              runtime: {
-                ...this.configManager.get().runtime,
-                pythonPath: value.trim() || undefined,
-              },
-            });
+            this.configManager.updateMachineRuntime({ pythonPath: value.trim() || undefined });
             await this.configManager.save();
           }),
       );
     pythonPathSetting.settingEl.addClass('vault-terminal-runtime-python-path');
+
+    const defaultShell = process.platform === 'win32' ? 'powershell' : (process.env.SHELL ?? '/bin/bash');
+    const shellPresets: [string, string][] = process.platform === 'win32'
+      ? [[defaultShell, 'System default'], ['powershell', 'PowerShell'], ['pwsh', 'PowerShell 7'], ['cmd', 'Command Prompt']]
+      : [[defaultShell, 'System default'], ['/bin/zsh', 'Zsh'], ['/bin/bash', 'Bash']];
+    const currentShell = this.configManager.getShell() ?? '';
+    const shellSetting = new Setting(container)
+      .setName('Shell')
+      .setDesc('Shell to use for terminal sessions. Leave empty for system default.');
+    let shellInput: HTMLInputElement;
+    shellSetting.addText((text) => {
+      text
+        .setPlaceholder(defaultShell)
+        .setValue(currentShell)
+        .onChange(async (value) => {
+          this.configManager.setShell(value.trim() || undefined);
+          await this.configManager.save();
+        });
+      shellInput = text.inputEl;
+    });
+    shellSetting.addExtraButton((b) => {
+      b.setIcon('chevron-down').setTooltip('Presets');
+      b.extraSettingsEl.addEventListener('click', (e: MouseEvent) => {
+        const menu = new Menu();
+        for (const [value, label] of shellPresets) {
+          menu.addItem((item) =>
+            item.setTitle(label).onClick(async () => {
+              const resolved = label === 'System default' ? '' : value;
+              shellInput.value = resolved;
+              shellInput.dispatchEvent(new Event('input'));
+              this.configManager.setShell(resolved || undefined);
+              await this.configManager.save();
+            }),
+          );
+        }
+        menu.showAtMouseEvent(e);
+      });
+    });
 
     if (!status) {
       container.createEl('p', {
@@ -1442,7 +1473,7 @@ export class VaultTerminalSettingTab extends PluginSettingTab {
     this.display();
     try {
       this.runtimeStatus = await checkRuntimeStatus(this.vaultTerminalPlugin.getPluginDirectory(), {
-        pythonPath: this.configManager.get().runtime?.pythonPath,
+        pythonPath: this.configManager.getMachineRuntime().pythonPath,
       });
       this.runtimeLastChecked = new Date().toLocaleTimeString();
     } catch (error) {

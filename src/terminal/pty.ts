@@ -10,6 +10,7 @@ interface PtyOptions {
   locale?: LocaleSetting;
   appLocale?: string;
   pythonPath?: string;
+  shell?: string;
   cols?: number;
   rows?: number;
 }
@@ -134,7 +135,6 @@ export class PtyManager {
   private pty: PtyProcess | null = null;
 
   async spawn(options: PtyOptions): Promise<PtyProcess> {
-    const { shell, args } = this.detectShell();
     const {
       vaultRoot,
       pluginDir,
@@ -142,9 +142,11 @@ export class PtyManager {
       locale = 'system',
       appLocale = 'en',
       pythonPath,
+      shell: shellOverride,
       cols = 80,
       rows = 24,
     } = options;
+    const { shell, args } = this.detectShell(shellOverride);
     const resolvedLocale = resolveLocale(locale, appLocale);
     const localeEnv: Record<string, string> = resolvedLocale
       ? { LANG: resolvedLocale, LC_ALL: resolvedLocale }
@@ -222,13 +224,17 @@ export class PtyManager {
     this.pty = null;
   }
 
-  private detectShell(): { shell: string; args: string[] } {
-    if (process.platform === 'win32') {
-      return { shell: process.env.COMSPEC ?? 'cmd.exe', args: [] };
-    }
-
-    const shell = process.env.SHELL ?? '/bin/bash';
+  private detectShell(shellOverride?: string): { shell: string; args: string[] } {
+    const shell = shellOverride
+      || (process.platform === 'win32' ? 'powershell' : (process.env.SHELL ?? '/bin/bash'));
     const shellName = path.basename(shell).toLowerCase();
+
+    if (process.platform === 'win32') {
+      if (shellName === 'powershell.exe' || shellName === 'pwsh.exe' || shellName === 'pwsh') {
+        return { shell, args: ['-NoLogo'] };
+      }
+      return { shell, args: [] };
+    }
 
     if (shellName === 'zsh' || shellName === 'bash') {
       return { shell, args: ['-il'] };

@@ -67,8 +67,9 @@ export class TerminalView extends ItemView {
     await this.configManager.load();
 
     const config = this.configManager.get();
+    const machineRuntime = this.configManager.getMachineRuntime();
     const runtimeStatus = await checkRuntimeStatus(this.pluginDir, {
-      pythonPath: config.runtime?.pythonPath,
+      pythonPath: machineRuntime.pythonPath,
     });
     if (!runtimeStatus.available) {
       this.showRuntimeRequiredDialog();
@@ -193,7 +194,8 @@ export class TerminalView extends ItemView {
         env: flattenEnvVars(config.env),
         locale: config.locale,
         appLocale: getLanguage(),
-        pythonPath: config.runtime?.pythonPath,
+        pythonPath: machineRuntime.pythonPath,
+        shell: this.configManager.getShell(),
         cols: this.terminal.cols,
         rows: this.terminal.rows,
       });

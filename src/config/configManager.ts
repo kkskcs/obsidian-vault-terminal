@@ -1,4 +1,5 @@
 import { App, FileSystemAdapter, Notice, TFile } from 'obsidian';
+import { machineIdSync } from 'node-machine-id';
 
 export interface ActionParam {
   name: string;
@@ -79,6 +80,11 @@ export interface OpenBehaviorConfig {
 export interface RuntimeConfig {
   pythonPath?: string;
 }
+
+export type MachineRuntimeMap = Record<string, RuntimeConfig>;
+
+export type ShellOption = string;
+export type PlatformShellMap = Partial<Record<NodeJS.Platform, ShellOption>>;
 
 export type LocaleSetting = 'system' | 'app' | string;
 
@@ -212,7 +218,8 @@ export interface VaultTerminalConfig {
   vaultRoot?: boolean;
   scriptFolder?: string;
   locale?: LocaleSetting;
-  runtime?: RuntimeConfig;
+  runtime?: MachineRuntimeMap;
+  shells?: PlatformShellMap;
   terminalOptions?: Record<string, unknown>;
   profiles?: Record<string, Profile>;
   defaultProfile?: string;
@@ -669,5 +676,33 @@ export class ConfigManager {
 
   getScriptFolder(): string {
     return this.config.scriptFolder ?? '.vault-terminal/scripts';
+  }
+
+  getMachineId(): string {
+    return machineIdSync(true);
+  }
+
+  getMachineRuntime(): RuntimeConfig {
+    return this.config.runtime?.[this.getMachineId()] ?? {};
+  }
+
+  updateMachineRuntime(partial: Partial<RuntimeConfig>): void {
+    const id = this.getMachineId();
+    const current = this.config.runtime?.[id] ?? {};
+    this.config = {
+      ...this.config,
+      runtime: { ...this.config.runtime, [id]: { ...current, ...partial } },
+    };
+  }
+
+  getShell(): string | undefined {
+    return this.config.shells?.[process.platform];
+  }
+
+  setShell(shell: string | undefined): void {
+    this.config = {
+      ...this.config,
+      shells: { ...this.config.shells, [process.platform]: shell },
+    };
   }
 }

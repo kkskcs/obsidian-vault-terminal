@@ -104,7 +104,7 @@ sudo pacman -S python
 Install Python 3 using the Python Install Manager from [python.org](https://www.python.org/downloads/), then install pywinpty and reopen Obsidian.
 
 ```powershell
-winget install python3
+winget install Python.PythonInstallManager
 python3 -m pip install pywinpty
 ```
 
