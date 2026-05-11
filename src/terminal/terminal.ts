@@ -3,10 +3,11 @@ import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal } from '@xterm/xterm';
-import { ItemView, Scope, WorkspaceLeaf, getLanguage } from 'obsidian';
+import { ItemView, Notice, Scope, WorkspaceLeaf, getLanguage } from 'obsidian';
 import { ActionRegistry } from '../actions/actionRegistry';
 import { ConfigManager, flattenEnvVars } from '../config/configManager';
 import { RuntimeRequiredDialog } from '../ui/dialog';
+import { checkRuntimeStatus } from '../terminal/pythonRuntime';
 import { ActionButton, SystemButtonCallbacks, Toolbar } from '../ui/toolbar';
 import { registerLinkProvider } from './links';
 import { PtyManager } from './pty';
@@ -64,6 +65,15 @@ export class TerminalView extends ItemView {
 
   async onOpen(): Promise<void> {
     await this.configManager.load();
+
+    const config = this.configManager.get();
+    const runtimeStatus = await checkRuntimeStatus(this.pluginDir, {
+      pythonPath: config.runtime?.pythonPath,
+    });
+    if (!runtimeStatus.available) {
+      this.showRuntimeRequiredDialog();
+      return;
+    }
 
     const container = this.contentEl;
     container.empty();
@@ -175,7 +185,6 @@ export class TerminalView extends ItemView {
     }
 
     const vaultRoot = this.configManager.getVaultRoot();
-    const config = this.configManager.get();
     let pty;
     try {
       pty = await this.ptyManager.spawn({
@@ -190,12 +199,18 @@ export class TerminalView extends ItemView {
       });
     } catch (error) {
       console.error('Failed to start Vault Terminal PTY', error);
-      this.showRuntimeRequiredDialog();
+      new Notice('Vault Terminal: Failed to start terminal session.');
       return;
     }
 
-    pty.onData((data) => this.terminal?.write(data));
-    pty.onExit(() => this.leaf.detach());
+    let receivedData = false;
+    pty.onData((data) => { receivedData = true; this.terminal?.write(data); });
+    pty.onExit(() => {
+      if (!receivedData) {
+        new Notice('Vault Terminal: Terminal session ended unexpectedly.');
+      }
+      this.leaf.detach();
+    });
     this.terminal.onData((data) => this.ptyManager.write(data));
 
     const onDocDragOver = (e: DragEvent) => {
